@@ -1,0 +1,41 @@
+# secrets / local state
+.env
+.env.*
+!.env.example
+!.env.farm.example
+
+# runtime data (keep structure README only)
+data/*
+!data/README.md
+results/*
+!results/README.md
+results.json
+results.json.tmp
+*.db
+*.db-*
+logs/
+*.log
+
+# proxies with credentials (keep examples only)
+config/proxies.txt
+config/proxies.ranked.txt
+!config/proxies.example.txt
+
+# binaries / build
+bin/
+mistral-router
+*.exe
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.sdk/
+*.tar.gz
+dist/
+share-out/
+
+# editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
