@@ -126,6 +126,13 @@ make router
 make clean
 ```
 
+## Security notes
+
+- Never commit `.env`, proxy lists, `data/`, or `results/` (already gitignored).
+- On first router start, set `ADMIN_PASSWORD` or use the one-time random password printed in logs.
+- Prefer binding the admin UI to localhost / reverse-proxy auth on a public VPS.
+- Run `scripts/package.sh` before sharing a tarball; it strips runtime secrets.
+
 ## Troubleshooting
 
 | Symptom | Fix |

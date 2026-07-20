@@ -49,7 +49,7 @@ API_BASE = _env("MISTRAL_API_BASE", "https://api.mistral.ai").rstrip("/")
 
 IMAP_USER = _env("IMAP_USER")
 IMAP_PASS = _env("IMAP_PASS")
-IMAP_HOST = _env("IMAP_HOST", "imap.hostinger.com")
+IMAP_HOST = _env("IMAP_HOST", "imap.example.com")
 IMAP_PORT = _env_int("IMAP_PORT", 993)
 EMAIL_DOMAIN = _env("EMAIL_DOMAIN").lstrip("@")
 

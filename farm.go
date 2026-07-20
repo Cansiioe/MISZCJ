@@ -149,7 +149,7 @@ func (f *FarmManager) StartWith(maxAttempts, concurrency int) error {
 		if err != nil {
 			status = "failed"
 		}
-		// Import results into standalone router.db only (no Belalang/share side-effects)
+		// Import results into standalone router.db only
 		newAccounts := 0
 		resultsPath := filepath.Join(f.farmDir, "results.json")
 		if count, err := importResultsJSON(f.store, resultsPath); err == nil {

@@ -40,13 +40,19 @@ rm -f "$STAGE/.env" "$STAGE/.env.farm" \
   "$STAGE/results.json" 2>/dev/null || true
 rm -rf "$STAGE/data" "$STAGE/results" "$STAGE/bin" 2>/dev/null || true
 
-# double-check no private keys / long secrets in staged tree (heuristic)
-if rg -n --hidden -g '!.git' -g '!*.example' \
-  -e 'ory_st_[A-Za-z0-9]{10,}' \
-  -e 'IMAP_PASS=.+' \
-  -e 'http://[^:]+:[^@]+@' \
-  "$STAGE" 2>/dev/null | head -20; then
-  echo "WARN: possible secrets still in stage — review before sharing" >&2
+# double-check no private keys / long secrets / personal markers in staged tree
+if command -v rg >/dev/null 2>&1; then
+  if rg -n --hidden -g '!.git' -g '!*.example' -g '!go.sum' \
+    -e 'ory_st_[A-Za-z0-9]{10,}' \
+    -e 'IMAP_PASS=.+' \
+    -e 'http://[^:]+:[^@]+@' \
+    -e '43\.133\.149\.136' \
+    -e 'imap\.hostinger\.com' \
+    -e 'pool-proxy-secret' \
+    -e '\"123456\"' \
+    "$STAGE" 2>/dev/null | head -20; then
+    echo "WARN: possible secrets still in stage — review before sharing" >&2
+  fi
 fi
 
 mkdir -p "$OUT_DIR"

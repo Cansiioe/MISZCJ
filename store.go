@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"log"
+	"os"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -132,11 +133,24 @@ CREATE TABLE IF NOT EXISTS usage (
 		return err
 	}
 
-	// Default password
+	// Bootstrap admin password once: ADMIN_PASSWORD env, else random (logged once).
+	// Never ship a fixed weak default password in source.
 	var cnt int
 	s.db.QueryRow("SELECT COUNT(*) FROM settings WHERE key='auth_password'").Scan(&cnt)
 	if cnt == 0 {
-		hash, _ := bcrypt.GenerateFromPassword([]byte("123456"), bcrypt.DefaultCost)
+		pw := os.Getenv("ADMIN_PASSWORD")
+		if pw == "" {
+			b := make([]byte, 8)
+			if _, err := rand.Read(b); err != nil {
+				log.Fatalf("failed to generate admin password: %v", err)
+			}
+			pw = hex.EncodeToString(b)
+			log.Printf("Generated initial admin password: %s (change in Admin UI or set ADMIN_PASSWORD before first start)", pw)
+		}
+		hash, err := bcrypt.GenerateFromPassword([]byte(pw), bcrypt.DefaultCost)
+		if err != nil {
+			log.Fatalf("failed to hash admin password: %v", err)
+		}
 		s.db.Exec("INSERT INTO settings(key,value) VALUES('auth_password',?)", string(hash))
 	}
 
@@ -146,9 +160,9 @@ CREATE TABLE IF NOT EXISTS usage (
 	if cntLimit == 0 {
 		s.db.Exec("INSERT INTO settings(key,value) VALUES('proxy_limit', '1')")
 	}
-	// Default farm config
+	// Default farm config (generic placeholders only — set real values via Admin UI / .env)
 	defaults := map[string]string{
-		"IMAP_HOST":    "imap.hostinger.com",
+		"IMAP_HOST":    "imap.example.com",
 		"IMAP_PORT":    "993",
 		"MAX_ATTEMPTS": "50",
 		"CONCURRENCY":  "1",
