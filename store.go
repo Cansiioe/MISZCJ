@@ -698,12 +698,17 @@ func (s *Store) GetRouterKeys() []RouterKey {
 }
 
 // keyState 推导密钥状态，前端直接展示，不必自己算。
+//
+// 时间统一按 UTC 解析：写入时用的就是 UTC（见 admin.go 的 AddDate），
+// SQLite 的 datetime('now') 也是 UTC。之前用 time.Parse 默认按 UTC 解析、
+// 却拿本地时间比较，在东八区会让过期判断晚 8 小时才生效。
 func keyState(k RouterKey) string {
 	if !k.Active {
 		return "disabled"
 	}
 	if k.ExpiresAt != "" {
-		if t, err := time.Parse("2006-01-02 15:04:05", k.ExpiresAt); err == nil && time.Now().After(t) {
+		if t, err := time.ParseInLocation("2006-01-02 15:04:05", k.ExpiresAt, time.UTC); err == nil &&
+			time.Now().UTC().After(t) {
 			return "expired"
 		}
 	}

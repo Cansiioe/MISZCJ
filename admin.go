@@ -219,7 +219,7 @@ func (a *AdminHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		expires := ""
 		if body.ExpiresInDays > 0 {
-			expires = time.Now().AddDate(0, 0, body.ExpiresInDays).Format("2006-01-02 15:04:05")
+			expires = time.Now().UTC().AddDate(0, 0, body.ExpiresInDays).Format("2006-01-02 15:04:05")
 		}
 		key := a.store.AddRouterKeyWith(body.Label, expires, body.QuotaTokens,
 			strings.TrimSpace(body.AllowedModels), strings.TrimSpace(body.AllowedIPs))
@@ -241,7 +241,7 @@ func (a *AdminHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		json.NewDecoder(r.Body).Decode(&body)
 		expires := ""
 		if body.ExpiresInDays > 0 {
-			expires = time.Now().AddDate(0, 0, body.ExpiresInDays).Format("2006-01-02 15:04:05")
+			expires = time.Now().UTC().AddDate(0, 0, body.ExpiresInDays).Format("2006-01-02 15:04:05")
 		}
 		if err := a.store.UpdateRouterKey(body.Key, body.Label, expires, body.QuotaTokens,
 			strings.TrimSpace(body.AllowedModels), strings.TrimSpace(body.AllowedIPs), body.Active); err != nil {
