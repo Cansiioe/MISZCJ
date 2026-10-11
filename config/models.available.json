@@ -1,0 +1,55 @@
+{
+  "note": "Mistral 免费层（Free mode）实测可用的模型。router 只放行 allow 里的模型，其余请求直接返回 400 并附可用清单，避免客户端选到需要付费的旗舰模型后拿到难懂的 429。",
+  "verified_at": "2026-10-10",
+  "verified_with": "免费层新注册账号",
+  "how_to_verify": "把 /v1/models 里的模型逐个 POST /v1/chat/completions，看响应头 x-ratelimit-limit-req-minute 是否为 0",
+  "default": "ministral-8b-latest",
+  "allow": [
+    "ministral-3b-latest",
+    "ministral-3b-2512",
+    "ministral-8b-latest",
+    "ministral-8b-2512",
+    "ministral-14b-latest",
+    "ministral-14b-2512",
+    "codestral-latest",
+    "codestral-2508",
+    "mistral-code-latest",
+    "mistral-code-fim-latest",
+    "voxtral-small-latest",
+    "voxtral-small-2507"
+  ],
+  "limits_req_per_minute": {
+    "ministral-3b-latest": 750,
+    "ministral-3b-2512": 750,
+    "ministral-8b-latest": 188,
+    "ministral-8b-2512": 188,
+    "codestral-latest": 125,
+    "codestral-2508": 125,
+    "mistral-code-latest": 125,
+    "mistral-code-fim-latest": 125,
+    "voxtral-small-latest": 60,
+    "voxtral-small-2507": 60,
+    "ministral-14b-latest": 30,
+    "ministral-14b-2512": 30
+  },
+  "blocked": {
+    "rate_limit_zero": [
+      "mistral-small-latest",
+      "mistral-small-2603",
+      "mistral-medium-latest",
+      "mistral-medium",
+      "mistral-medium-2604",
+      "mistral-medium-3",
+      "mistral-medium-3-5",
+      "mistral-medium-3.5",
+      "magistral-small-latest",
+      "magistral-medium-latest",
+      "mistral-vibe-cli-latest",
+      "mistral-vibe-cli-fast"
+    ],
+    "forbidden_403": [
+      "labs-leanstral-1-5",
+      "labs-leanstral-1-5-1"
+    ]
+  }
+}

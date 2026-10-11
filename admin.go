@@ -17,8 +17,8 @@ import (
 
 // ── Session store ─────────────────────────────────────────────────────────────
 type sessionStore struct {
-	mu      sync.Mutex
-	tokens  map[string]time.Time
+	mu     sync.Mutex
+	tokens map[string]time.Time
 }
 
 func newSessionStore() *sessionStore {
@@ -84,7 +84,7 @@ func (a *AdminHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if err := bcrypt.CompareHashAndPassword([]byte(settings["auth_password"]), []byte(body.Password)); err != nil {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(401)
-			json.NewEncoder(w).Encode(map[string]string{"error": "invalid password"})
+			json.NewEncoder(w).Encode(map[string]string{"error": "密码错误"})
 			return
 		}
 		token := generateToken()
@@ -104,7 +104,7 @@ func (a *AdminHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, map[string]string{"status": "ok"})
-		
+
 	case path == "/settings" && r.Method == http.MethodGet:
 		if !a.auth(w, r) {
 			return
@@ -114,7 +114,7 @@ func (a *AdminHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			limit = "1"
 		}
 		writeJSON(w, map[string]string{"proxy_limit": limit})
-		
+
 	case path == "/settings/proxy-limit" && r.Method == http.MethodPost:
 		if !a.auth(w, r) {
 			return
@@ -205,14 +205,60 @@ func (a *AdminHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		var body struct {
-			Label string `json:"label"`
+			Label         string `json:"label"`
+			ExpiresInDays int    `json:"expires_in_days"`
+			QuotaTokens   int64  `json:"quota_tokens"`
+			AllowedModels string `json:"allowed_models"`
+			AllowedIPs    string `json:"allowed_ips"`
 		}
 		json.NewDecoder(r.Body).Decode(&body)
 		if body.Label == "" {
-			body.Label = "default"
+			body.Label = "默认"
 		}
-		key := a.store.AddRouterKey(body.Label)
+		expires := ""
+		if body.ExpiresInDays > 0 {
+			expires = time.Now().AddDate(0, 0, body.ExpiresInDays).Format("2006-01-02 15:04:05")
+		}
+		key := a.store.AddRouterKeyWith(body.Label, expires, body.QuotaTokens,
+			strings.TrimSpace(body.AllowedModels), strings.TrimSpace(body.AllowedIPs))
 		writeJSON(w, map[string]string{"key": key})
+
+	case path == "/keys/update" && r.Method == http.MethodPost:
+		if !a.auth(w, r) {
+			return
+		}
+		var body struct {
+			Key           string `json:"key"`
+			Label         string `json:"label"`
+			ExpiresInDays int    `json:"expires_in_days"` // <=0 表示永不过期
+			QuotaTokens   int64  `json:"quota_tokens"`
+			AllowedModels string `json:"allowed_models"`
+			AllowedIPs    string `json:"allowed_ips"`
+			Active        bool   `json:"active"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		expires := ""
+		if body.ExpiresInDays > 0 {
+			expires = time.Now().AddDate(0, 0, body.ExpiresInDays).Format("2006-01-02 15:04:05")
+		}
+		if err := a.store.UpdateRouterKey(body.Key, body.Label, expires, body.QuotaTokens,
+			strings.TrimSpace(body.AllowedModels), strings.TrimSpace(body.AllowedIPs), body.Active); err != nil {
+			w.WriteHeader(500)
+			writeJSON(w, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, map[string]string{"status": "ok"})
+
+	case path == "/keys/delete" && r.Method == http.MethodPost:
+		if !a.auth(w, r) {
+			return
+		}
+		var body struct {
+			Key string `json:"key"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		a.store.DeleteRouterKey(body.Key)
+		writeJSON(w, map[string]string{"status": "ok"})
 
 	case path == "/keys/revoke" && r.Method == http.MethodPost:
 		if !a.auth(w, r) {
@@ -225,12 +271,73 @@ func (a *AdminHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		a.store.RevokeRouterKey(body.Key)
 		writeJSON(w, map[string]string{"status": "ok"})
 
+	// ── 调用日志 ──────────────────────────────────────────────────────────
+	case path == "/logs" && r.Method == http.MethodGet:
+		if !a.auth(w, r) {
+			return
+		}
+		query := r.URL.Query()
+		limit, _ := strconv.Atoi(query.Get("limit"))
+		offset, _ := strconv.Atoi(query.Get("offset"))
+		items, total := a.store.QueryLogs(LogQuery{
+			KeyPrefix: query.Get("key"),
+			Model:     query.Get("model"),
+			Status:    query.Get("status"),
+			Since:     query.Get("since"),
+			Limit:     limit,
+			Offset:    offset,
+		})
+		if items == nil {
+			items = []RequestLog{}
+		}
+		writeJSON(w, map[string]interface{}{
+			"items": items, "total": total,
+			"limit": limit, "offset": offset,
+		})
+
+	case path == "/logs/clear" && r.Method == http.MethodPost:
+		if !a.auth(w, r) {
+			return
+		}
+		writeJSON(w, map[string]interface{}{"deleted": a.store.ClearLogs()})
+
+	// ── 模型中心 ──────────────────────────────────────────────────────────
+	case path == "/models/available" && r.Method == http.MethodGet:
+		if !a.auth(w, r) {
+			return
+		}
+		writeJSON(w, a.modelsInfo())
+
 	// ── Stats & Usage ─────────────────────────────────────────────────────
 	case path == "/stats" && r.Method == http.MethodGet:
 		if !a.auth(w, r) {
 			return
 		}
 		writeJSON(w, a.store.GetStats())
+
+	case path == "/stats/series" && r.Method == http.MethodGet:
+		if !a.auth(w, r) {
+			return
+		}
+		days, _ := strconv.Atoi(r.URL.Query().Get("days"))
+		series := a.store.GetDailySeries(days)
+		if series == nil {
+			series = []SeriesPoint{}
+		}
+		writeJSON(w, series)
+
+	case path == "/accounts/stats" && r.Method == http.MethodGet:
+		if !a.auth(w, r) {
+			return
+		}
+		accts := a.store.GetAccountsWithStats(r.URL.Query().Get("dead") == "1")
+		for i := range accts {
+			accts[i].APIKey = maskAPIKey(accts[i].APIKey)
+		}
+		if accts == nil {
+			accts = []Account{}
+		}
+		writeJSON(w, accts)
 
 	case path == "/usage" && r.Method == http.MethodGet:
 		if !a.auth(w, r) {
@@ -261,6 +368,23 @@ func (a *AdminHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, a.proxy.Status())
+
+	case path == "/scheduling" && r.Method == http.MethodGet:
+		if !a.auth(w, r) {
+			return
+		}
+		a.handleScheduling(w, r)
+
+	case path == "/logs/cleanup" && r.Method == http.MethodPost:
+		if !a.auth(w, r) {
+			return
+		}
+		var body struct {
+			KeepDays int `json:"keep_days"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		n := a.store.CleanupLogs(body.KeepDays)
+		writeJSON(w, map[string]interface{}{"deleted": n, "keep_days": body.KeepDays})
 
 	// ── Farm ──────────────────────────────────────────────────────────────
 	case path == "/farm/config" && r.Method == http.MethodGet:
@@ -337,7 +461,7 @@ func (a *AdminHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		json.NewDecoder(r.Body).Decode(&body)
 		if len(body.Password) < 4 {
 			w.WriteHeader(400)
-			writeJSON(w, map[string]string{"error": "password too short"})
+			writeJSON(w, map[string]string{"error": "密码太短（至少 4 位）"})
 			return
 		}
 		hash, err := bcrypt.GenerateFromPassword([]byte(body.Password), bcrypt.DefaultCost)
@@ -359,7 +483,7 @@ func (a *AdminHandler) auth(w http.ResponseWriter, r *http.Request) bool {
 	if err != nil || !a.sessions.valid(c.Value) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(401)
-		json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+		json.NewEncoder(w).Encode(map[string]string{"error": "未登录或会话已过期"})
 		return false
 	}
 	return true
@@ -402,6 +526,7 @@ func importMistralResults(store *Store, path string) (int, error) {
 	var results []struct {
 		Email     string `json:"email"`
 		APIKey    string `json:"api_key"`
+		Password  string `json:"password"`
 		Timestamp string `json:"timestamp"`
 	}
 	if err := json.Unmarshal(data, &results); err != nil {
@@ -412,7 +537,7 @@ func importMistralResults(store *Store, path string) (int, error) {
 		if r.Email == "" || r.APIKey == "" {
 			continue
 		}
-		if err := store.AddAccount(r.Email, r.APIKey, "farm"); err == nil {
+		if err := store.AddAccountFull(r.Email, r.APIKey, r.Password, "farm"); err == nil {
 			count++
 		}
 	}
@@ -441,7 +566,7 @@ func tailFile(path string, n int) string {
 func (a *AdminHandler) handleModels(w http.ResponseWriter, r *http.Request) {
 	accounts := a.store.GetAliveAccounts()
 	if len(accounts) == 0 {
-		writeJSON(w, map[string]interface{}{"models": []string{}, "error": "no alive accounts"})
+		writeJSON(w, map[string]interface{}{"models": []string{}, "error": "无可用账号"})
 		return
 	}
 	apiKey := accounts[0].APIKey
@@ -459,69 +584,76 @@ func (a *AdminHandler) handleModels(w http.ResponseWriter, r *http.Request) {
 	w.Write(body)
 }
 
-type QuotaResult struct {
-	AccountID int    `json:"account_id"`
-	Email     string `json:"email"`
-	Status    string `json:"status"` // "ok", "dead", "error"
-	Remaining int64  `json:"remaining,omitempty"`
-	Limit     int64  `json:"limit,omitempty"`
-	Error     string `json:"error,omitempty"`
+// handleQuota 查询账号的计划、余额与可用模型。
+// 默认查全部存活账号；?id=1,2 指定账号，?force=1 跳过缓存。
+func (a *AdminHandler) handleQuota(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query()
+	force := query.Get("force") == "1"
+
+	var ids []int
+	if spec := query.Get("id"); spec != "" {
+		for _, part := range strings.Split(spec, ",") {
+			if n, err := strconv.Atoi(strings.TrimSpace(part)); err == nil {
+				ids = append(ids, n)
+			}
+		}
+	} else {
+		for _, acc := range a.store.GetAliveAccounts() {
+			ids = append(ids, acc.ID)
+		}
+	}
+	if len(ids) == 0 {
+		writeJSON(w, []AccountQuota{})
+		return
+	}
+	writeJSON(w, QueryAllQuota(a.store, ids, force))
+	// 额度可能变了，重新加载账号，让加权轮询用上新权重
+	a.proxy.Reload()
 }
 
-// handleQuota checks token quota for all alive accounts concurrently
-func (a *AdminHandler) handleQuota(w http.ResponseWriter, r *http.Request) {
-	accounts := a.store.GetAliveAccounts()
-	results := make([]QuotaResult, len(accounts))
-	var wg sync.WaitGroup
-	for i, acct := range accounts {
-		wg.Add(1)
-		go func(idx int, a Account) {
-			defer wg.Done()
-			res := QuotaResult{AccountID: a.ID, Email: a.Email}
-			req, err := http.NewRequest("GET", mistralBase+"/v1/usage", nil)
-			if err != nil {
-				res.Status = "error"
-				res.Error = err.Error()
-				results[idx] = res
-				return
-			}
-			req.Header.Set("Authorization", "Bearer "+a.APIKey)
-			client := &http.Client{Timeout: 8 * time.Second}
-			resp, err := client.Do(req)
-			if err != nil {
-				res.Status = "error"
-				res.Error = err.Error()
-				results[idx] = res
-				return
-			}
-			defer resp.Body.Close()
-			body, _ := io.ReadAll(resp.Body)
-			if resp.StatusCode == 401 || resp.StatusCode == 403 {
-				res.Status = "dead"
-				results[idx] = res
-				return
-			}
-			var data map[string]interface{}
-			json.Unmarshal(body, &data)
-			// Mistral free tier returns monthly_limit / monthly_usage
-			res.Status = "ok"
-			if limit, ok := data["monthly_limit"].(float64); ok {
-				res.Limit = int64(limit)
-			}
-			if used, ok := data["monthly_usage"].(float64); ok {
-				if res.Limit > 0 {
-					res.Remaining = res.Limit - int64(used)
-				}
-			}
-			// Fallback: if endpoint not found, return static
-			if resp.StatusCode == 404 {
-				res.Status = "ok"
-				res.Remaining = 1_000_000
-				res.Limit = 1_000_000
-			}
-			results[idx] = res
-		}(i, acct)
+// handleScheduling 返回调度与限流状态，供控制台展示。
+func (a *AdminHandler) handleScheduling(w http.ResponseWriter, r *http.Request) {
+	out := a.proxy.limiter.Status()
+	out["weights"] = a.proxy.Weights()
+	out["proxy_limit"] = a.store.GetSetting("proxy_limit")
+	writeJSON(w, out)
+}
+
+// modelsInfo 返回模型白名单、配置文件元数据，以及每个模型的能力矩阵。
+func (a *AdminHandler) modelsInfo() map[string]interface{} {
+	f := a.proxy.filter
+	out := map[string]interface{}{
+		"enabled": f.Enabled(),
+		"allowed": f.Allowed(),
+		"default": f.DefaultModel(),
 	}
-	wg.Wait()
-	writeJSON(w, results)
+	path := getEnv("MODELS_FILE", filepath.Join(a.farm.farmDir, "config", "models.available.json"))
+	out["path"] = path
+	if data, err := os.ReadFile(path); err == nil {
+		var raw map[string]interface{}
+		if json.Unmarshal(data, &raw) == nil {
+			out["meta"] = raw
+		}
+	}
+
+	// 附上能力矩阵：从上游拉一次（带 10 分钟缓存），用任意存活账号的 key
+	alive := a.store.GetAliveAccounts()
+	if len(alive) > 0 {
+		caps := fetchModelCapabilities(alive[0].APIKey)
+		byID := make(map[string]ModelCapability, len(caps))
+		for _, c := range caps {
+			byID[c.ID] = c
+		}
+		details := make([]ModelCapability, 0, len(f.Allowed()))
+		for _, id := range f.Allowed() {
+			if c, ok := byID[id]; ok {
+				details = append(details, c)
+			} else {
+				details = append(details, ModelCapability{ID: id})
+			}
+		}
+		out["details"] = details
+		out["upstream_total"] = len(caps)
+	}
+	return out
 }

@@ -32,19 +32,19 @@ func (f *FarmManager) Start(maxAttempts int) error {
 	return f.StartWith(maxAttempts, 0)
 }
 
-// StartWith launches farm.py. maxAttempts/concurrency <=0 fall back to farm_config / defaults.
+// StartWith 启动 farm.py。maxAttempts/concurrency <=0 时回退到 farm_config 或默认值。
 func (f *FarmManager) StartWith(maxAttempts, concurrency int) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.running {
-		return fmt.Errorf("farm already running")
+		return fmt.Errorf("注册机已在运行中")
 	}
 
 	cfg := f.store.GetFarmConfig()
 	logDir := filepath.Join(f.dataDir, "logs")
 	os.MkdirAll(logDir, 0755)
 
-	// Prefer local venv if present, otherwise python3 on PATH.
+	// 优先使用本地 venv，没有就用 PATH 里的 python3。
 	pythonBin := "python3"
 	for _, cand := range []string{
 		filepath.Join(f.farmDir, ".venv", "bin", "python3"),
@@ -78,8 +78,8 @@ func (f *FarmManager) StartWith(maxAttempts, concurrency int) error {
 			concurrency = 1
 		}
 	}
-	// HTTP farm is light; allow higher concurrency than browser path.
-	// FARM_MODE=browser falls back to Camoufox (legacy).
+	// HTTP 注册模式很轻量，并发可以比浏览器模式高。
+	// FARM_MODE=browser 会回退到 Camoufox（旧路径）。
 	mode := strings.ToLower(cfg["FARM_MODE"])
 	if mode == "" {
 		mode = strings.ToLower(os.Getenv("FARM_MODE"))
@@ -89,7 +89,7 @@ func (f *FarmManager) StartWith(maxAttempts, concurrency int) error {
 	}
 	hardCap := 32
 	if mode == "browser" {
-		hardCap = 8 // each worker ≈ Camoufox 300–600MB
+		hardCap = 8 // 每个 worker 约占 Camoufox 300–600MB
 	}
 	if concurrency > hardCap {
 		concurrency = hardCap
@@ -101,14 +101,14 @@ func (f *FarmManager) StartWith(maxAttempts, concurrency int) error {
 	tmpLog := filepath.Join(logDir, fmt.Sprintf("farm-%d.log", time.Now().Unix()))
 	logFile, err := os.Create(tmpLog)
 	if err != nil {
-		return fmt.Errorf("failed to create log: %v", err)
+		return fmt.Errorf("创建日志文件失败: %v", err)
 	}
 
 	var cmd *exec.Cmd
 	if mode == "browser" {
 		cmd = exec.Command("xvfb-run", "--auto-servernum", pythonBin, "farm.py")
 	} else {
-		// Pure HTTP farm (default) — no browser/xvfb
+		// 纯 HTTP 注册（默认路径）—— 不需要浏览器 / xvfb
 		cmd = exec.Command(pythonBin, "farm_http.py")
 	}
 	cmd.Dir = f.farmDir
@@ -119,7 +119,7 @@ func (f *FarmManager) StartWith(maxAttempts, concurrency int) error {
 			env = append(env, k+"="+v)
 		}
 	}
-	// Explicit overrides last so they win over cfg map
+	// 显式覆盖放在最后，确保优先级高于 cfg
 	env = append(env, fmt.Sprintf("MAX_ATTEMPTS=%d", maxAttempts))
 	env = append(env, fmt.Sprintf("CONCURRENCY=%d", concurrency))
 	env = append(env, "PYTHONUNBUFFERED=1")
@@ -131,7 +131,7 @@ func (f *FarmManager) StartWith(maxAttempts, concurrency int) error {
 
 	if err := cmd.Start(); err != nil {
 		logFile.Close()
-		return fmt.Errorf("failed to start farm: %v", err)
+		return fmt.Errorf("启动注册机失败: %v", err)
 	}
 
 	f.cmd = cmd
@@ -139,7 +139,7 @@ func (f *FarmManager) StartWith(maxAttempts, concurrency int) error {
 	f.logPath = tmpLog
 	f.runID = f.store.StartFarmRun(cmd.Process.Pid, maxAttempts, tmpLog)
 
-	log.Printf("farm: started PID=%d runID=%d attempts=%d concurrency=%d log=%s",
+	log.Printf("注册机: 已启动 PID=%d runID=%d 尝试次数=%d 并发=%d 日志=%s",
 		cmd.Process.Pid, f.runID, maxAttempts, concurrency, tmpLog)
 
 	go func() {
@@ -149,21 +149,21 @@ func (f *FarmManager) StartWith(maxAttempts, concurrency int) error {
 		if err != nil {
 			status = "failed"
 		}
-		// Import results into standalone router.db only
+		// 结果只导入到独立的 router.db
 		newAccounts := 0
 		resultsPath := filepath.Join(f.farmDir, "results.json")
 		if count, err := importResultsJSON(f.store, resultsPath); err == nil {
 			newAccounts = count
-			log.Printf("farm: imported %d accounts from %s → router.db", count, resultsPath)
+			log.Printf("注册机: 已从 %s 导入 %d 个账号 → router.db", resultsPath, count)
 		} else {
-			log.Printf("farm: auto-import error: %v", err)
+			log.Printf("注册机: 自动导入出错: %v", err)
 		}
 		f.store.EndFarmRun(f.runID, status, newAccounts)
 		f.mu.Lock()
 		f.running = false
 		f.cmd = nil
 		f.mu.Unlock()
-		log.Printf("farm: finished status=%s new_accounts=%d", status, newAccounts)
+		log.Printf("注册机: 运行结束 状态=%s 新增账号=%d", status, newAccounts)
 	}()
 
 	return nil
@@ -173,7 +173,7 @@ func (f *FarmManager) Stop() error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if !f.running || f.cmd == nil {
-		return fmt.Errorf("farm not running")
+		return fmt.Errorf("注册机未在运行中")
 	}
 	if err := f.cmd.Process.Kill(); err != nil {
 		return err
@@ -198,7 +198,7 @@ func (f *FarmManager) GetLogTail(n int) string {
 	logPath := f.logPath
 	f.mu.Unlock()
 	if logPath == "" {
-		// Return last run log
+		// 回退到最近一次运行的日志
 		runs := f.store.GetFarmRuns(1)
 		if len(runs) > 0 {
 			logPath = runs[0].LogPath
@@ -226,6 +226,7 @@ func importResultsJSON(store *Store, path string) (int, error) {
 	var results []struct {
 		Email     string `json:"email"`
 		APIKey    string `json:"api_key"`
+		Password  string `json:"password"`
 		Timestamp string `json:"timestamp"`
 	}
 	if err := json.Unmarshal(data, &results); err != nil {
@@ -236,7 +237,8 @@ func importResultsJSON(store *Store, path string) (int, error) {
 		if r.Email == "" || r.APIKey == "" {
 			continue
 		}
-		if err := store.AddAccount(r.Email, r.APIKey, "farm"); err == nil {
+		// 密码一并存下，用于后续登录 console 查计划与余额
+		if err := store.AddAccountFull(r.Email, r.APIKey, r.Password, "注册机"); err == nil {
 			count++
 		}
 	}
