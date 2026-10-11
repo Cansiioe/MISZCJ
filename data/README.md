@@ -1,1 +1,1 @@
-Runtime data directory. router.db is created when the Go router starts.
+运行时数据目录。Go 路由器启动时会在这里创建 router.db。

@@ -1,11 +1,11 @@
-# One proxy per line. Lines starting with # ignored.
-# Supported formats:
+# 一行一个代理，以 # 开头的行会被忽略。
+# 支持的格式：
 #   http://user:pass@host:port
 #   host:port:user:pass
 #   user:pass@host:port
 #
-# Copy to proxies.ranked.txt (preferred) or proxies.txt
-# Ranked list = faster endpoints first (optional).
+# 复制为 proxies.ranked.txt（推荐）或 proxies.txt
+# ranked 列表 = 速度快的排前面（可选）。
 
 http://user:pass@1.2.3.4:8000
 http://user:pass@5.6.7.8:8000

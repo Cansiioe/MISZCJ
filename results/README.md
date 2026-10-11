@@ -1,1 +1,1 @@
-Farm batch outputs are written here at runtime.
+注册机的批量结果会在运行时写入此目录。
