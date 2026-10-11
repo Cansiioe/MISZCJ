@@ -1,684 +1,430 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Mistral Router</title>
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{background:#0f0f0f;color:#e0e0e0;font-family:'Courier New',monospace;font-size:13px}
-a{color:#7c9fff;text-decoration:none}
-.nav{background:#111;border-bottom:1px solid #222;padding:0 20px;display:flex;align-items:center;gap:0;height:44px}
-.nav-brand{color:#fff;font-weight:bold;font-size:15px;margin-right:24px;letter-spacing:1px}
-.nav a{padding:12px 14px;color:#999;display:block;font-size:12px;border-bottom:2px solid transparent}
-.nav a:hover,.nav a.active{color:#fff;border-bottom-color:#7c9fff}
-.content{padding:24px;max-width:1200px}
-.page{display:none}.page.active{display:block}
-.card{background:#1a1a1a;border:1px solid #2a2a2a;border-radius:4px;padding:16px;margin-bottom:16px}
-.card h3{color:#fff;margin-bottom:12px;font-size:13px;text-transform:uppercase;letter-spacing:1px}
-.stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:20px}
-.stat-card{background:#1a1a1a;border:1px solid #2a2a2a;border-radius:4px;padding:16px;text-align:center}
-.stat-val{font-size:28px;font-weight:bold;color:#7c9fff}
-.stat-label{font-size:11px;color:#666;margin-top:4px;text-transform:uppercase}
-table{width:100%;border-collapse:collapse}
-th{text-align:left;padding:8px 10px;color:#666;font-size:11px;text-transform:uppercase;border-bottom:1px solid #222}
-td{padding:8px 10px;border-bottom:1px solid #1e1e1e;font-size:12px}
-tr:hover td{background:#1f1f1f}
-.badge{display:inline-block;padding:2px 8px;border-radius:2px;font-size:10px;font-weight:bold}
-.badge-green{background:#1a3a1a;color:#4caf50;border:1px solid #2d5a2d}
-.badge-red{background:#3a1a1a;color:#f44336;border:1px solid #5a2d2d}
-.btn{padding:6px 14px;border:1px solid #333;background:#222;color:#ccc;cursor:pointer;border-radius:2px;font-size:12px;font-family:inherit}
-.btn:hover{background:#2a2a2a;color:#fff}
-.btn-primary{background:#2a3a5a;border-color:#3a5a8a;color:#7c9fff}
-.btn-primary:hover{background:#3a4a6a}
-.btn-danger{background:#3a1a1a;border-color:#5a2a2a;color:#f44336}
-.btn-danger:hover{background:#4a2a2a}
-.btn-sm{padding:3px 8px;font-size:11px}
-input,select,textarea{background:#111;border:1px solid #333;color:#e0e0e0;padding:7px 10px;font-family:inherit;font-size:12px;border-radius:2px;width:100%}
-input:focus,select:focus,textarea:focus{outline:none;border-color:#7c9fff}
-.form-row{margin-bottom:12px}
-.form-row label{display:block;color:#888;font-size:11px;margin-bottom:4px;text-transform:uppercase}
-.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-.key-box{font-family:monospace;background:#111;border:1px solid #333;padding:8px 12px;border-radius:2px;word-break:break-all;color:#7c9fff;font-size:11px}
-textarea.log-box{background:#050505;color:#0f0;font-size:11px;height:300px;resize:vertical;border-color:#1a1a1a;white-space:pre}
-.status-bar{display:flex;align-items:center;gap:12px;padding:8px 0;margin-bottom:12px}
-.dot{width:8px;height:8px;border-radius:50%;display:inline-block}
-.dot-green{background:#4caf50;box-shadow:0 0 6px #4caf50}
-.dot-red{background:#f44336}
-.dot-yellow{background:#ff9800;box-shadow:0 0 6px #ff9800}
-#login-wrap{position:fixed;inset:0;background:#0f0f0f;display:flex;align-items:center;justify-content:center;z-index:100}
-.login-card{background:#1a1a1a;border:1px solid #2a2a2a;padding:32px;width:320px;border-radius:4px}
-.login-card h2{color:#fff;margin-bottom:20px;font-size:16px;text-align:center}
-.login-card input{margin-bottom:12px}
-.login-card button{width:100%}
-.err{color:#f44336;font-size:11px;margin-top:8px}
-.tabs{display:flex;gap:4px;margin-bottom:16px}
-.tab{padding:6px 14px;cursor:pointer;background:#111;border:1px solid #222;border-radius:2px;color:#888;font-size:12px}
-.tab.active{background:#1a2a3a;border-color:#3a5a8a;color:#7c9fff}
-.copy-btn{font-size:10px;padding:2px 6px;margin-left:6px}
-.farm-running{color:#4caf50;font-weight:bold}
-.farm-stopped{color:#666}
-</style>
+<title>Mistral 路由控制台</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23c2410c'/><text x='16' y='23' font-size='19' font-family='sans-serif' font-weight='bold' fill='white' text-anchor='middle'>M</text></svg>">
+<link rel="stylesheet" href="/assets/app.css">
 </head>
 <body>
 
-<div id="login-wrap" style="display:none">
+<!-- ══ 登录 ══ -->
+<div class="login-wrap" id="login-wrap">
   <div class="login-card">
-    <h2>Mistral Router</h2>
-    <input type="password" id="login-pw" placeholder="Password" autocomplete="current-password">
-    <button class="btn btn-primary" onclick="doLogin()">Sign In</button>
-    <div class="err" id="login-err"></div>
+    <div class="brand">
+      <div class="logo">M</div>
+      <div>
+        <h2>Mistral 路由控制台</h2>
+        <div class="sub">账号池 · 密钥分发 · 用量审计</div>
+      </div>
+    </div>
+    <div class="field">
+      <label>管理员密码</label>
+      <input class="input" type="password" id="login-pw" placeholder="请输入密码" autocomplete="current-password">
+      <div class="hint" id="login-err" style="color:var(--danger)"></div>
+    </div>
+    <button class="btn btn-primary w-full" onclick="doLogin()">登 录</button>
   </div>
 </div>
 
-<div id="app" style="display:none">
-  <nav class="nav">
-    <span class="nav-brand">⚡ MISTRAL</span>
-    <a href="#dashboard" class="nav-link active">Dashboard</a>
-    <a href="#accounts" class="nav-link">Accounts</a>
-    <a href="#farm" class="nav-link">Farm</a>
-    <a href="#keys" class="nav-link">Keys</a>
-    <a href="#usage" class="nav-link">Usage</a>
-    <a href="#settings" class="nav-link">Settings</a>
-    <span style="flex:1"></span>
-    <button class="btn btn-sm" onclick="doLogout()">Logout</button>
-  </nav>
+<!-- ══ 主界面 ══ -->
+<div class="app" id="app" style="display:none">
+
+  <!-- 顶部工具行：命令面板 / 主题 / 退出 -->
+  <div class="topline">
+    <div class="topline-inner">
+      <div class="page-head">
+        <h1 id="page-title">仪表盘</h1>
+        <span class="page-sub" id="page-sub">账号池与调用概览</span>
+      </div>
+      <div class="topline-actions">
+        <button class="btn btn-sm btn-icon" id="theme-btn" onclick="toggleTheme()" title="切换主题"></button>
+        <button class="btn btn-sm" onclick="copyText(location.origin + '/v1', 'Base URL 已复制')" title="OpenAI 兼容接入地址">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          /v1
+        </button>
+        <button class="btn btn-sm btn-ghost" onclick="doLogout()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5M21 12H9"/></svg>
+          退出
+        </button>
+      </div>
+    </div>
+  </div>
+
   <div class="content">
 
-    <!-- Dashboard -->
-    <div id="page-dashboard" class="page">
-      <div class="stats" id="stats-grid"></div>
-       <div class="card" style="margin-bottom:16px;background:#1a2a3a;border-color:#3a5a8a">
-         <h3 style="color:#7c9fff">Your API Endpoint</h3>
-         <div style="display:flex;gap:12px;margin-top:8px">
-           <div style="flex:1">
-             <label style="display:block;color:#888;font-size:11px;margin-bottom:4px;text-transform:uppercase">Base URL</label>
-             <div style="display:flex;align-items:center">
-               <span class="key-box" style="flex:1" id="base-url-display">http://localhost:7623/v1</span>
-                             <button class="btn btn-sm copy-btn" id="base-url-copy" onclick="copyText(document.getElementById('base-url-display').textContent)">Copy</button>
-             </div>
-           </div>
-         </div>
-         <div style="margin-top:8px;font-size:11px;color:#888">Use this Base URL in your AI clients with any API Key generated from the <a href="#keys" style="text-decoration:underline">Keys tab</a>.</div>
-       </div>
-       <div class="card" id="proxy-status-card" style="display:none">
-         <h3>Proxy Status</h3>
-         <div class="status-bar">
-           <span class="dot" id="proxy-dot"></span>
-           <span id="proxy-status-text"></span>
-           <span style="flex:1"></span>
-           <span style="font-size:11px;color:#888" id="proxy-next-account"></span>
-         </div>
-       </div>
+    <!-- 仪表盘 -->
+    <section class="page" id="page-dashboard">
+      <div class="stats-grid" id="stats-grid"></div>
+
+      <div class="grid gap-4" style="grid-template-columns:1.7fr 1fr">
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <div class="card-title">近 14 天调用趋势</div>
+              <div class="card-desc">柱高 = 请求数，橙色表示当天有失败</div>
+            </div>
+          </div>
+          <div class="chart" id="trend-chart"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><div class="card-title">上游健康</div></div>
+          <div id="upstream-health"></div>
+        </div>
+      </div>
+
       <div class="card">
-        <h3>Recent Requests</h3>
+        <div class="card-head">
+          <div class="card-title">最近用量汇总</div>
+          <button class="btn btn-sm" onclick="navigate('#usage')">查看全部</button>
+        </div>
         <div id="recent-usage"></div>
       </div>
-    </div>
+    </section>
 
-    <!-- Accounts -->
-    <div id="page-accounts" class="page">
-      <div class="tabs">
-        <div class="tab active" onclick="showAccountTab('alive',this)">Alive</div>
-        <div class="tab" onclick="showAccountTab('dead',this)">Dead</div>
+    <!-- 账号 -->
+    <section class="page" id="page-accounts">
+      <div class="tabs" id="acct-tabs">
+        <div class="tab active" data-tab="alive" onclick="switchAcctTab('alive')">存活</div>
+        <div class="tab" data-tab="dead" onclick="switchAcctTab('dead')">失效</div>
       </div>
       <div class="card">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-          <h3 id="acct-title">Alive Accounts</h3>
-          <button class="btn btn-sm btn-primary" onclick="refreshAccounts()">Refresh</button>
+        <div class="card-head">
+          <div>
+            <div class="card-title">账号列表</div>
+            <div class="card-desc">当前 <span id="acct-count">0</span> 个 · 认证失败会自动移入失效</div>
+          </div>
+          <div class="flex gap-2">
+            <button class="btn btn-sm" onclick="loadQuota(true)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+              查询额度
+            </button>
+            <button class="btn btn-sm" onclick="renderAccounts()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5"/></svg>
+              刷新
+            </button>
+          </div>
         </div>
-        <table id="acct-table">
-          <thead><tr><th>ID</th><th>Email</th><th>API Key</th><th>Source</th><th>Added</th><th>Action</th></tr></thead>
-          <tbody id="acct-body"></tbody>
-        </table>
+        <div class="table-wrap">
+          <table class="tbl">
+            <thead><tr>
+              <th>ID</th><th>邮箱</th><th>计划 / 额度</th><th>可用模型</th><th>状态</th>
+              <th>调用量</th><th>最近使用</th><th style="text-align:right">操作</th>
+            </tr></thead>
+            <tbody id="acct-body"></tbody>
+          </table>
+        </div>
       </div>
-    </div>
+    </section>
 
-    <!-- Farm -->
-    <div id="page-farm" class="page">
+    <!-- 密钥 -->
+    <section class="page" id="page-keys">
       <div class="card">
-        <h3>Farm Control</h3>
-        <div class="status-bar">
-          <span class="dot" id="farm-dot"></span>
-          <span id="farm-status-text">Loading...</span>
-          <button class="btn btn-primary" id="farm-start-btn" onclick="startFarm()">Start Farm</button>
-          <button class="btn btn-danger" id="farm-stop-btn" onclick="stopFarm()" style="display:none">Stop Farm</button>
+        <div class="card-head">
+          <div>
+            <div class="card-title">下游密钥</div>
+            <div class="card-desc">每把密钥可独立设置有效期、Token 配额、模型与 IP 白名单</div>
+          </div>
+          <button class="btn btn-sm btn-primary" onclick="openKeyModal()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+            创建密钥
+          </button>
         </div>
-        <div class="form-row">
-          <label>Max Attempts</label>
-          <input type="number" id="farm-max-attempts" value="10" min="1" style="width:120px">
-        </div>
-        <div class="form-row">
-          <label>Concurrency</label>
-          <input type="number" id="farm-concurrency" value="3" min="1" max="32" style="width:120px" title="HTTP workers (1-32). Browser mode cap 8.">
-          <span style="color:#888;font-size:12px;margin-left:8px">HTTP workers 1–32 (default mode)</span>
+        <div class="table-wrap">
+          <table class="tbl">
+            <thead><tr>
+              <th>密钥</th><th>标签</th><th>状态</th><th>请求数</th><th>配额</th>
+              <th>策略</th><th>有效期</th><th>最近使用</th><th style="text-align:right">操作</th>
+            </tr></thead>
+            <tbody id="keys-body"></tbody>
+          </table>
         </div>
       </div>
+    </section>
+
+    <!-- 模型中心 -->
+    <section class="page" id="page-models">
+      <div id="models-wrap"></div>
+    </section>
+
+    <!-- 调用日志 -->
+    <section class="page" id="page-logs">
       <div class="card">
-        <h3>Farm Config</h3>
+        <div class="card-head">
+          <div>
+            <div class="card-title">调用审计</div>
+            <div class="card-desc">共 <span id="logs-total">0</span> 条 · 保留密钥、来源 IP、模型、延迟与错误</div>
+          </div>
+          <div class="flex gap-2">
+            <button class="btn btn-sm" onclick="renderLogs()">刷新</button>
+            <button class="btn btn-sm btn-danger" onclick="clearLogs()">清空</button>
+          </div>
+        </div>
+        <div class="form-grid mb-3">
+          <div class="field">
+            <label>密钥前缀</label>
+            <input class="input mono" id="log-key" placeholder="nm-xxxxxxxx" onkeydown="if(event.key==='Enter'){logOffset=0;renderLogs()}">
+          </div>
+          <div class="field">
+            <label>模型</label>
+            <input class="input mono" id="log-model" placeholder="ministral-8b-latest" onkeydown="if(event.key==='Enter'){logOffset=0;renderLogs()}">
+          </div>
+          <div class="field">
+            <label>状态</label>
+            <select class="select" id="log-status" onchange="logOffset=0;renderLogs()">
+              <option value="">全部</option>
+              <option value="ok">成功</option>
+              <option value="fail">失败</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>起始时间</label>
+            <input class="input" id="log-since" placeholder="2026-10-10 00:00:00" onkeydown="if(event.key==='Enter'){logOffset=0;renderLogs()}">
+          </div>
+        </div>
+        <div class="flex gap-2 mb-3">
+          <button class="btn btn-sm btn-primary" onclick="logOffset=0;renderLogs()">查询</button>
+          <button class="btn btn-sm" onclick="resetLogFilter()">重置</button>
+        </div>
+        <div class="table-wrap">
+          <table class="tbl">
+            <thead><tr>
+              <th>时间</th><th>密钥</th><th>账号</th><th>模型</th><th>来源 IP</th>
+              <th>状态</th><th>Token</th><th>延迟</th><th>错误</th>
+            </tr></thead>
+            <tbody id="logs-body"></tbody>
+          </table>
+        </div>
+        <div class="flex items-center justify-between mt-3" id="logs-pager"></div>
+      </div>
+    </section>
+
+    <!-- 用量 -->
+    <section class="page" id="page-usage">
+      <div class="tabs" id="usage-tabs">
+        <div class="tab active" data-tab="models" onclick="switchUsageTab('models')">按模型</div>
+        <div class="tab" data-tab="accounts" onclick="switchUsageTab('accounts')">按账号</div>
+      </div>
+      <div id="usage-wrap"></div>
+    </section>
+
+    <!-- 试玩 -->
+    <section class="page" id="page-playground">
+      <div class="grid gap-4" style="grid-template-columns:280px 1fr">
+        <div class="card">
+          <div class="card-title mb-3">参数</div>
+          <div class="field">
+            <label>模型</label>
+            <select class="select mono" id="pg-model"></select>
+            <div class="hint">仅列出白名单内可用模型</div>
+          </div>
+          <div class="field">
+            <label>路由密钥</label>
+            <input class="input mono" id="pg-key" placeholder="留空则自动创建">
+          </div>
+          <div class="field">
+            <label>最大输出 Token</label>
+            <input class="input" type="number" id="pg-max" value="256" min="1" max="4096">
+          </div>
+          <button class="btn btn-sm w-full" onclick="chatHistory=[];renderChat()">清空对话</button>
+        </div>
+
+        <div class="card" style="display:flex;flex-direction:column;min-height:520px">
+          <div class="card-head"><div class="card-title">对话</div></div>
+          <div class="flex-1" id="pg-chat" style="overflow-y:auto;max-height:420px;padding-right:4px"></div>
+          <div class="flex gap-2 mt-3">
+            <input class="input flex-1" id="pg-input" placeholder="输入消息，⌘/Ctrl + Enter 发送">
+            <button class="btn btn-primary" id="pg-send" onclick="sendChat()">发送</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 注册机 -->
+    <section class="page" id="page-farm">
+      <div class="card">
+        <div class="card-head">
+          <div>
+            <div class="card-title">注册机控制</div>
+            <div class="card-desc">纯 HTTP 批量造号：建邮箱 → 注册 → 取验证码 → 铸造密钥</div>
+          </div>
+          <div class="flex items-center gap-3">
+            <span class="flex items-center gap-2 text-sm" id="farm-status"></span>
+            <button class="btn btn-sm btn-primary" id="farm-start-btn" onclick="startFarm()">启动</button>
+            <button class="btn btn-sm btn-danger" id="farm-stop-btn" onclick="stopFarm()">停止</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <div>
+            <div class="card-title">配置</div>
+            <div class="card-desc">保存后下次启动生效</div>
+          </div>
+          <button class="btn btn-sm btn-primary" onclick="saveFarmConfig()">保存配置</button>
+        </div>
         <div class="form-grid" id="farm-config-form"></div>
-        <button class="btn btn-primary" style="margin-top:12px" onclick="saveFarmConfig()">Save Config</button>
       </div>
+
       <div class="card">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-          <h3>Live Log</h3>
-          <button class="btn btn-sm" onclick="clearLog()">Clear</button>
+        <div class="card-head">
+          <div class="card-title">实时日志</div>
+          <button class="btn btn-sm" onclick="document.getElementById('farm-log').value=''">清空显示</button>
         </div>
-        <textarea class="log-box" id="farm-log" readonly></textarea>
+        <textarea class="log-box w-full" id="farm-log" readonly spellcheck="false"></textarea>
       </div>
+
       <div class="card">
-        <h3>Run History</h3>
-        <table>
-          <thead><tr><th>ID</th><th>Started</th><th>Ended</th><th>Status</th><th>Attempts</th><th>New Accounts</th></tr></thead>
-          <tbody id="farm-runs-body"></tbody>
-        </table>
+        <div class="card-head"><div class="card-title">运行历史</div></div>
+        <div class="table-wrap">
+          <table class="tbl">
+            <thead><tr><th>ID</th><th>开始</th><th>结束</th><th>状态</th><th>目标数</th><th>新增账号</th></tr></thead>
+            <tbody id="farm-runs-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 设置 -->
+    <section class="page" id="page-settings">
+      <div class="grid gap-4" style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr))">
+        <div class="card">
+          <div class="card-head"><div class="card-title">路由策略</div></div>
+          <div class="field">
+            <label>轮询切换阈值</label>
+            <input class="input" type="number" id="set-proxy-limit" min="1" max="1000" placeholder="1">
+            <div class="hint">同一账号连续处理多少个请求后轮换到下一个</div>
+          </div>
+          <button class="btn btn-primary" onclick="saveProxyLimit()">保存</button>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><div class="card-title">修改密码</div></div>
+          <div class="field">
+            <label>新密码</label>
+            <input class="input" type="password" id="set-new-pw" placeholder="至少 4 位">
+          </div>
+          <div class="field">
+            <label>确认新密码</label>
+            <input class="input" type="password" id="set-confirm-pw" placeholder="再次输入">
+          </div>
+          <button class="btn btn-primary" onclick="changePassword()">更新密码</button>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><div class="card-title">接入信息</div></div>
+          <div class="field">
+            <label>Base URL</label>
+            <div class="code-box" id="set-base-url"></div>
+          </div>
+          <div class="field">
+            <label>调用示例</label>
+            <div class="code-box">curl <span id="set-base-url-2"></span>/chat/completions \
+  -H "Authorization: Bearer &lt;你的密钥&gt;" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"ministral-8b-latest","messages":[{"role":"user","content":"hi"}]}'</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><div class="card-title">日志保留</div></div>
+          <div class="field">
+            <label>清理早于 N 天的调用日志</label>
+            <div class="flex gap-2">
+              <input class="input" type="number" id="set-keep-days" value="30" min="0" style="width:110px">
+              <button class="btn btn-primary" onclick="cleanupLogs()">立即清理</button>
+            </div>
+            <div class="hint">0 = 不清理。服务启动时与每 6 小时也会按 LOG_RETENTION_DAYS 自动执行</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><div class="card-title">外观</div></div>
+          <div class="flex items-center justify-between">
+            <div>
+              <div class="text-sm font-medium">深色模式</div>
+              <div class="hint">跟随系统或手动切换</div>
+            </div>
+            <button class="btn btn-sm" onclick="toggleTheme()">切换主题</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- 浮动底栏导航 -->
+  <nav class="dock" id="dock"></nav>
+</div>
+
+<!-- ══ 密钥对话框 ══ -->
+<div class="modal-mask" id="key-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="key-modal-title">创建密钥</h3>
+      <div class="card-desc">配额与白名单留空表示不限制</div>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="key-edit-target">
+      <div class="field">
+        <label>标签</label>
+        <input class="input" id="k-label" placeholder="例如：小明-生产环境">
+      </div>
+      <div class="form-grid">
+        <div class="field">
+          <label>有效期（天）<span class="hint">留空 = 永不过期</span></label>
+          <input class="input" type="number" id="k-days" min="1" placeholder="30">
+        </div>
+        <div class="field">
+          <label>Token 配额<span class="hint">留空 = 不限</span></label>
+          <input class="input" type="number" id="k-quota" min="0" placeholder="1000000">
+        </div>
+      </div>
+      <div class="field">
+        <label>模型白名单<span class="hint">逗号分隔，支持 ministral-* 通配</span></label>
+        <input class="input mono" id="k-models" placeholder="ministral-8b-latest, codestral-latest">
+      </div>
+      <div class="field">
+        <label>IP 白名单<span class="hint">逗号分隔，支持 192.168.1.* 通配</span></label>
+        <input class="input mono" id="k-ips" placeholder="203.0.113.10, 10.0.0.*">
+      </div>
+      <div class="flex items-center justify-between hidden" id="k-active-wrap">
+        <div>
+          <div class="text-sm font-medium">启用该密钥</div>
+          <div class="hint">关闭后使用它的请求会立即被拒绝</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="k-active">
+          <span class="track"></span><span class="thumb"></span>
+        </label>
       </div>
     </div>
-
-    <!-- Keys -->
-    <div id="page-keys" class="page">
-      <div class="card">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-          <h3>Router Keys</h3>
-          <button class="btn btn-primary btn-sm" onclick="generateKey()">Generate New Key</button>
-        </div>
-        <table>
-          <thead><tr><th>Key</th><th>Label</th><th>Created</th><th>Status</th><th>Action</th></tr></thead>
-          <tbody id="keys-body"></tbody>
-        </table>
-      </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeModal('key-modal')">取消</button>
+      <button class="btn btn-primary" onclick="saveKey()">保存</button>
     </div>
-
-    <!-- Usage -->
-    <div id="page-usage" class="page">
-       <div class="tabs">
-         <div class="tab active" onclick="showUsageTab('models',this)">By Model</div>
-         <div class="tab" onclick="showUsageTab('accounts',this)">By Account</div>
-       </div>
-      <div class="card">
-         <h3 id="usage-title">Usage by Model</h3>
-        <table id="usage-table">
-          <thead><tr><th>Date</th><th>Model</th><th>Requests</th><th>Prompt Tokens</th><th>Completion Tokens</th><th>Total Tokens</th></tr></thead>
-          <tbody id="usage-body"></tbody>
-        </table>
-      </div>
-       <div class="card" id="models-card" style="margin-top:16px">
-         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-           <h3>Available Models (Live from Mistral)</h3>
-           <button class="btn btn-sm btn-primary" onclick="loadModels()">Refresh</button>
-         </div>
-         <div id="models-list" style="display:flex;flex-wrap:wrap;gap:8px"></div>
-       </div>
-       <div class="card" id="quota-card" style="margin-top:16px;display:none">
-         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-           <h3>Live Account Quotas</h3>
-           <button class="btn btn-sm btn-primary" onclick="loadQuotas()">Refresh</button>
-         </div>
-         <table id="quota-table">
-           <thead><tr><th>Email</th><th>Usage Limit</th><th>Usage</th><th>Remaining</th></tr></thead>
-           <tbody id="quota-body"></tbody>
-         </table>
-       </div>
-    </div>
-
-    <!-- Settings -->
-    <div id="page-settings" class="page">
-      <div class="card" style="max-width:400px">
-         <h3>Router Settings</h3>
-         <div class="form-row" style="margin-top:12px">
-           <label>Round-Robin Proxy Limit</label>
-           <div style="display:flex;gap:8px">
-             <input type="number" id="setting-proxy-limit" min="1" max="1000" placeholder="1" style="width:100px">
-             <button class="btn btn-primary" onclick="updateProxyLimit()">Save Limit</button>
-           </div>
-           <div style="font-size:11px;color:#888;margin-top:4px">Number of consecutive requests to send to one account before rotating to the next.</div>
-         </div>
-         <div class="err" id="limit-msg" style="margin-bottom:20px"></div>
-        
-        <h3 style="margin-top:24px;border-top:1px solid #2a2a2a;padding-top:16px">Change Password</h3>
-        <div class="form-row" style="margin-top:12px">
-          <label>New Password</label>
-          <input type="password" id="new-pw" placeholder="New password">
-        </div>
-        <div class="form-row">
-          <label>Confirm Password</label>
-          <input type="password" id="confirm-pw" placeholder="Confirm">
-        </div>
-        <button class="btn btn-primary" onclick="changePassword()">Update Password</button>
-        <div class="err" id="settings-msg"></div>
-      </div>
-    </div>
-
   </div>
 </div>
 
-<script>
-const API = '/admin/api';
-let farmPollInterval = null;
-let currentAccountTab = 'alive';
-let currentUsageTab = 'models';
-let dashboardPollInterval = null;
-// ── Auth ─────────────────────────────────────────────────────────────────────
-// ── Auth ─────────────────────────────────────────────────────────────────────
-async function checkAuth() {
-  try {
-    const r = await fetch(`${API}/auth-check`);
-    if (r.ok) { showApp(); return; }
-  } catch(e) {}
-  showLogin();
-}
+<!-- ══ 账号额度详情 ══ -->
+<div class="modal-mask" id="quota-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="quota-title">账号额度</h3>
+      <div class="card-desc" id="quota-sub"></div>
+    </div>
+    <div class="modal-body" id="quota-body"></div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeModal('quota-modal')">关闭</button>
+    </div>
+  </div>
+</div>
 
-function showLogin() {
-  document.getElementById('login-wrap').style.display = 'flex';
-  document.getElementById('app').style.display = 'none';
-}
+<div class="toast-wrap" id="toast-wrap"></div>
 
-function showApp() {
-  document.getElementById('login-wrap').style.display = 'none';
-  document.getElementById('app').style.display = 'block';
-  navigate(location.hash || '#dashboard');
-}
-
-async function doLogin() {
-  const pw = document.getElementById('login-pw').value;
-  const r = await fetch(`${API}/login`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pw})});
-  if (r.ok) { showApp(); } else { document.getElementById('login-err').textContent = 'Wrong password'; }
-}
-
-document.getElementById('login-pw').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
-
-async function doLogout() {
-  await fetch(`${API}/logout`, {method:'POST'});
-  showLogin();
-}
-
-// ── Navigation ────────────────────────────────────────────────────────────────
-function navigate(hash) {
-  const page = hash.replace('#','') || 'dashboard';
-  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
-  const p = document.getElementById('page-'+page);
-  if (p) p.classList.add('active');
-  document.querySelectorAll('.nav-link').forEach(l => { if(l.getAttribute('href')===hash) l.classList.add('active'); });
-  loadPage(page);
-}
-
-window.addEventListener('hashchange', () => navigate(location.hash));
-
-function loadPage(page) {
- clearInterval(farmPollInterval);
- clearInterval(dashboardPollInterval);
- if (page==='dashboard') loadDashboard();
- else if (page==='accounts') loadAccounts();
- else if (page==='farm') loadFarm();
- else if (page==='keys') loadKeys();
- else if (page==='usage') loadUsage();
-  else if (page==='settings') loadSettings();
-}
-// ── Dashboard ─────────────────────────────────────────────────────────────────
-// ── Dashboard ─────────────────────────────────────────────────────────────────
-async function loadDashboard() {
-  const [stats, usage, proxy] = await Promise.all([
-   fetch(`${API}/stats`).then(r=>r.json()),
-    fetch(`${API}/usage`).then(r=>r.json()),
-    fetch(`${API}/proxy/status`).then(r=>r.json()).catch(()=>null)
- ]);
- const sg = document.getElementById('stats-grid');
-  const items = [
-    {val:stats.alive_accounts, label:'Alive Accounts', color:'#4caf50'},
-    {val:stats.dead_accounts, label:'Dead Accounts', color:'#f44336'},
-    {val:stats.total_accounts, label:'Total Accounts'},
-    {val:stats.total_requests, label:'Total Requests'},
-    {val:numFmt(stats.total_tokens), label:'Total Tokens'},
-  ];
-  sg.innerHTML = items.map(i => `<div class="stat-card"><div class="stat-val" style="color:${i.color||'#7c9fff'}">${i.val}</div><div class="stat-label">${i.label}</div></div>`).join('');
-  
-  // Auto-detect base URL from browser location
-  const baseUrl = window.location.origin + '/v1';
-  const display = document.getElementById('base-url-display');
-  if (display) {
-    display.textContent = baseUrl;
-    display.nextElementSibling.setAttribute('onclick', `copyText('${baseUrl}')`);
-  }
-
-  const ub = document.getElementById('recent-usage');
-    if (!usage || !usage.length) { ub.innerHTML='<span style="color:#666">No data yet</span>'; return; }
-    ub.innerHTML = `<table><thead><tr><th>Date</th><th>Model</th><th>Requests</th><th>Tokens</th></tr></thead><tbody>${
-    usage.slice(0,10).map(u=>`<tr><td>${u.date}</td><td>${u.model}</td><td>${u.requests}</td><td>${numFmt(u.prompt_tokens+u.completion_tokens)}</td></tr>`).join('')
-    }</tbody></table>`;
- 
-    if (proxy) {
-     const pc = document.getElementById('proxy-status-card');
-     pc.style.display = '';
-     const pDot = document.getElementById('proxy-dot');
-     const pText = document.getElementById('proxy-status-text');
-     const pNext = document.getElementById('proxy-next-account');
-    
-     if (proxy.status === 'ok') {
-       pDot.className = 'dot dot-green';
-       pText.style.color = '#4caf50';
-       pText.textContent = `Online (${proxy.alive_accounts} accounts)`;
-       pNext.textContent = proxy.current_index !== undefined ? `Round-robin idx: ${proxy.current_index}` : '';
-     } else {
-       pDot.className = 'dot dot-red';
-       pText.style.color = '#f44336';
-       pText.textContent = 'No alive accounts';
-       pNext.textContent = '';
-     }
-    }
-  
-    clearInterval(dashboardPollInterval);
-    dashboardPollInterval = setInterval(async () => {
-     if (document.getElementById('page-dashboard').classList.contains('active')) {
-       const [s, p] = await Promise.all([
-         fetch(`${API}/stats`).then(r=>r.json()).catch(()=>null),
-         fetch(`${API}/proxy/status`).then(r=>r.json()).catch(()=>null)
-       ]);
-       if (s) {
-         sg.innerHTML = [
-           {val:s.alive_accounts, label:'Alive Accounts', color:'#4caf50'},
-           {val:s.dead_accounts, label:'Dead Accounts', color:'#f44336'},
-           {val:s.total_accounts, label:'Total Accounts'},
-           {val:s.total_requests, label:'Total Requests'},
-           {val:numFmt(s.total_tokens), label:'Total Tokens'},
-         ].map(i => `<div class="stat-card"><div class="stat-val" style="color:${i.color||'#7c9fff'}">${i.val}</div><div class="stat-label">${i.label}</div></div>`).join('');
-       }
-       if (p) {
-         const pDot = document.getElementById('proxy-dot');
-         const pText = document.getElementById('proxy-status-text');
-         const pNext = document.getElementById('proxy-next-account');
-         if (p.status === 'ok') {
-           pDot.className = 'dot dot-green';
-           pText.style.color = '#4caf50';
-           pText.textContent = `Online (${p.alive_accounts} accounts)`;
-           pNext.textContent = p.current_index !== undefined ? `Round-robin idx: ${p.current_index}` : '';
-         } else {
-           pDot.className = 'dot dot-red';
-           pText.style.color = '#f44336';
-           pText.textContent = 'No alive accounts';
-           pNext.textContent = '';
-         }
-       }
-     }
-    }, 5000);
-    }
-
-// ── Accounts ──────────────────────────────────────────────────────────────────
-function showAccountTab(tab, el) {
-  currentAccountTab = tab;
-  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
-  el.classList.add('active');
-  document.getElementById('acct-title').textContent = tab==='alive' ? 'Alive Accounts' : 'Dead Accounts';
-  const thead = document.querySelector('#acct-table thead tr');
-  if (tab==='alive') {
-    thead.innerHTML='<th>ID</th><th>Email</th><th>API Key</th><th>Source</th><th>Added</th><th>Action</th>';
-  } else {
-    thead.innerHTML='<th>ID</th><th>Email</th><th>API Key</th><th>Reason</th><th>Dead At</th><th>Action</th>';
-  }
-  loadAccounts();
-}
-
-async function loadAccounts() {
-  const url = currentAccountTab==='alive' ? `${API}/accounts` : `${API}/accounts/dead`;
-  const data = await fetch(url).then(r=>r.json());
-  const tbody = document.getElementById('acct-body');
-  if (!data || !data.length) { tbody.innerHTML='<tr><td colspan="6" style="color:#666;text-align:center">No accounts</td></tr>'; return; }
-  tbody.innerHTML = data.map(a => {
-    if (currentAccountTab==='alive') {
-      return `<tr><td>${a.id}</td><td>${a.email}</td><td><span class="key-box">${a.api_key}</span></td><td>${a.source}</td><td>${a.added_at}</td><td><button class="btn btn-danger btn-sm" onclick="deleteAccount(${a.id})">Delete</button></td></tr>`;
-    } else {
-      return `<tr><td>${a.id}</td><td>${a.email}</td><td><span class="key-box">${a.api_key}</span></td><td style="color:#f44336;font-size:11px">${a.dead_reason||''}</td><td>${a.dead_at||''}</td><td><button class="btn btn-sm btn-primary" onclick="reviveAccount(${a.id})">Revive</button> <button class="btn btn-danger btn-sm" onclick="deleteAccount(${a.id})">Delete</button></td></tr>`;
-    }
-  }).join('');
-}
-
-function refreshAccounts() { loadAccounts(); }
-
-async function reviveAccount(id) {
-  await fetch(`${API}/accounts/revive`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})});
-  loadAccounts();
-}
-
-async function deleteAccount(id) {
-  if (!confirm('Delete account?')) return;
-  await fetch(`${API}/accounts/delete`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})});
-  loadAccounts();
-}
-
-// ── Farm ─────────────────────────────────────────────────────────────────────
-let farmConfig = {};
-
-async function loadFarm() {
-  const [cfg, runs] = await Promise.all([
-    fetch(`${API}/farm/config`).then(r=>r.json()),
-    fetch(`${API}/farm/runs`).then(r=>r.json())
-  ]);
-  farmConfig = cfg;
-  renderFarmConfig(cfg);
-  renderFarmRuns(runs);
-  updateFarmStatus();
-  startFarmPoll();
-}
-
-function renderFarmConfig(cfg) {
-  const fields = ['IMAP_USER','IMAP_PASS','IMAP_HOST','IMAP_PORT','EMAIL_DOMAIN','MAX_ATTEMPTS','CONCURRENCY','FARM_MODE'];
-  const types = {IMAP_PASS:'password', MAX_ATTEMPTS:'number', CONCURRENCY:'number'};
-  document.getElementById('farm-config-form').innerHTML = fields.map(k =>
-    `<div class="form-row"><label>${k}</label><input type="${types[k]||'text'}" id="cfg-${k}" value="${cfg[k]||''}"${k==='CONCURRENCY'?' min="1" max="32"':''}></div>`
-  ).join('');
-  if (cfg.MAX_ATTEMPTS) document.getElementById('farm-max-attempts').value = cfg.MAX_ATTEMPTS;
-  if (cfg.CONCURRENCY) document.getElementById('farm-concurrency').value = cfg.CONCURRENCY;
-}
-
-async function saveFarmConfig() {
-  const fields = ['IMAP_USER','IMAP_PASS','IMAP_HOST','IMAP_PORT','EMAIL_DOMAIN','MAX_ATTEMPTS','CONCURRENCY','FARM_MODE'];
-  const cfg = {};
-  fields.forEach(k => { cfg[k] = document.getElementById('cfg-'+k).value; });
-  // clamp concurrency client-side (HTTP default up to 32)
-  let c = parseInt(cfg.CONCURRENCY||'1',10); if (!c||c<1) c=1; if (c>32) c=32; cfg.CONCURRENCY = String(c);
-  if (!cfg.FARM_MODE) cfg.FARM_MODE = 'http';
-  await fetch(`${API}/farm/config`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(cfg)});
-  alert('Config saved!');
-}
-
-function renderFarmRuns(runs) {
-  const tbody = document.getElementById('farm-runs-body');
-  if (!runs||!runs.length) { tbody.innerHTML='<tr><td colspan="6" style="color:#666;text-align:center">No runs yet</td></tr>'; return; }
-  const colors = {success:'#4caf50',failed:'#f44336',running:'#ff9800',stopped:'#666'};
-  tbody.innerHTML = runs.map(r =>
-    `<tr><td>${r.id}</td><td>${r.started_at}</td><td>${r.ended_at}</td><td><span style="color:${colors[r.status]||'#ccc'}">${r.status}</span></td><td>${r.max_attempts}</td><td>${r.new_accounts}</td></tr>`
-  ).join('');
-}
-
-async function updateFarmStatus() {
-  const r = await fetch(`${API}/farm/runs`).then(d=>d.json()).catch(()=>[]);
-  const running = r && r.length && r[0].status === 'running';
-  const dot = document.getElementById('farm-dot');
-  const txt = document.getElementById('farm-status-text');
-  const startBtn = document.getElementById('farm-start-btn');
-  const stopBtn = document.getElementById('farm-stop-btn');
-  if (running) {
-    dot.className='dot dot-yellow';
-    txt.innerHTML='<span class="farm-running">Farm Running...</span>';
-    startBtn.style.display='none';
-    stopBtn.style.display='';
-  } else {
-    dot.className='dot dot-red';
-    txt.className='farm-stopped';
-    txt.textContent='Farm Stopped';
-    startBtn.style.display='';
-    stopBtn.style.display='none';
-  }
-}
-
-function startFarmPoll() {
-  clearInterval(farmPollInterval);
-  farmPollInterval = setInterval(async () => {
-    const log = await fetch(`${API}/farm/log`).then(r=>r.text()).catch(()=>'');
-    const ta = document.getElementById('farm-log');
-    if (log && log !== ta.value) {
-      ta.value = log;
-      ta.scrollTop = ta.scrollHeight;
-    }
-    updateFarmStatus();
-  }, 3000);
-}
-
-async function startFarm() {
-  const max = parseInt(document.getElementById('farm-max-attempts').value)||10;
-  let conc = parseInt(document.getElementById('farm-concurrency').value)||1;
-  if (conc < 1) conc = 1;
-  if (conc > 32) conc = 32;
-  const r = await fetch(`${API}/farm/start`, {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({max_attempts:max, concurrency:conc})
-  });
-  const d = await r.json();
-  if (d.error) { alert('Error: '+d.error); return; }
-  updateFarmStatus();
-}
-
-async function stopFarm() {
-  await fetch(`${API}/farm/stop`, {method:'POST'});
-  updateFarmStatus();
-}
-
-function clearLog() { document.getElementById('farm-log').value=''; }
-
-// ── Keys ──────────────────────────────────────────────────────────────────────
-async function loadKeys() {
-  const data = await fetch(`${API}/keys`).then(r=>r.json());
-  const tbody = document.getElementById('keys-body');
-  if (!data||!data.length) { tbody.innerHTML='<tr><td colspan="5" style="color:#666;text-align:center">No keys</td></tr>'; return; }
-  tbody.innerHTML = data.map(k =>
-    `<tr><td><span class="key-box" id="key-${k.key.slice(-8)}">${k.key}</span><button class="btn btn-sm copy-btn" onclick="copyText('${k.key}')">Copy</button></td><td>${k.label}</td><td>${k.created_at}</td><td><span class="badge ${k.active?'badge-green':'badge-red'}">${k.active?'ACTIVE':'REVOKED'}</span></td><td>${k.active?`<button class="btn btn-danger btn-sm" onclick="revokeKey('${k.key}')">Revoke</button>`:''}</td></tr>`
-  ).join('');
-}
-
-async function generateKey() {
-  const label = prompt('Key label:', 'default') || 'default';
-  const r = await fetch(`${API}/keys/generate`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({label})});
-  const d = await r.json();
-  alert('New key: '+d.key);
-  loadKeys();
-}
-
-async function revokeKey(key) {
-  if (!confirm('Revoke this key?')) return;
-  await fetch(`${API}/keys/revoke`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key})});
-  loadKeys();
-}
-
-// ── Usage ─────────────────────────────────────────────────────────────────────
-function showUsageTab(tab, el) {
-  currentUsageTab = tab;
-  document.querySelectorAll('#page-usage .tab').forEach(t=>t.classList.remove('active'));
-  el.classList.add('active');
-  
-  document.getElementById('usage-title').textContent = tab==='models' ? 'Usage by Model' : 'Usage by Account';
-  const thead = document.querySelector('#usage-table thead tr');
-  if (tab==='models') {
-    thead.innerHTML='<th>Date</th><th>Model</th><th>Requests</th><th>Prompt Tokens</th><th>Completion Tokens</th><th>Total Tokens</th>';
-    document.getElementById('models-card').style.display = '';
-    document.getElementById('quota-card').style.display = 'none';
-  } else {
-    thead.innerHTML='<th>Email</th><th>Total Requests</th><th>Prompt Tokens</th><th>Completion Tokens</th><th>Total Tokens</th>';
-    document.getElementById('models-card').style.display = 'none';
-    document.getElementById('quota-card').style.display = '';
-  }
-  loadUsage();
-  if (tab==='models') loadModels();
-  if (tab==='accounts') loadQuotas();
-}
-
-async function loadUsage() {
-  const url = currentUsageTab==='models' ? `${API}/usage` : `${API}/usage/accounts`;
-  const data = await fetch(url).then(r=>r.json());
-  const tbody = document.getElementById('usage-body');
-  if (!data||!data.length) { tbody.innerHTML=`<tr><td colspan="6" style="color:#666;text-align:center">No data</td></tr>`; return; }
-  
-  if (currentUsageTab==='models') {
-    tbody.innerHTML = data.map(u =>
-      `<tr><td>${u.date}</td><td>${u.model}</td><td>${u.requests}</td><td>${numFmt(u.prompt_tokens)}</td><td>${numFmt(u.completion_tokens)}</td><td>${numFmt(u.prompt_tokens+u.completion_tokens)}</td></tr>`
-    ).join('');
-  } else {
-    tbody.innerHTML = data.map(u =>
-      `<tr><td>${u.email}</td><td>${u.requests}</td><td>${numFmt(u.prompt_tokens)}</td><td>${numFmt(u.completion_tokens)}</td><td>${numFmt(u.prompt_tokens+u.completion_tokens)}</td></tr>`
-    ).join('');
-  }
-}
-
-async function loadModels() {
-  const ml = document.getElementById('models-list');
-  ml.innerHTML = '<span style="color:#666">Loading models from Mistral...</span>';
-  try {
-    const d = await fetch(`${API}/models`).then(r=>r.json());
-    if (d.error) { ml.innerHTML=`<span style="color:#f44336">Error: ${d.error}</span>`; return; }
-    if (!d.models || !d.models.length) { ml.innerHTML='<span style="color:#666">No models returned</span>'; return; }
-    ml.innerHTML = d.models.map(m=>`<span class="badge" style="background:#1a2a3a;border:1px solid #3a5a8a;color:#7c9fff;padding:4px 8px;font-size:11px">${m}</span>`).join('');
-  } catch(e) {
-    ml.innerHTML = '<span style="color:#f44336">Failed to load models</span>';
-  }
-}
-
-async function loadQuotas() {
-  const tb = document.getElementById('quota-body');
-  tb.innerHTML = '<tr><td colspan="4" style="color:#666;text-align:center">Checking live quotas...</td></tr>';
-  try {
-    const d = await fetch(`${API}/quota`).then(r=>r.json());
-    if (d.error) { tb.innerHTML=`<tr><td colspan="4" style="color:#f44336;text-align:center">Error: ${d.error}</td></tr>`; return; }
-    if (!d.quotas || !d.quotas.length) { tb.innerHTML='<tr><td colspan="4" style="color:#666;text-align:center">No alive accounts</td></tr>'; return; }
-    
-    tb.innerHTML = d.quotas.map(q => {
-      let lim = q.limit ? `$${q.limit.toFixed(2)}` : 'Unknown';
-      let used = q.used ? `$${q.used.toFixed(2)}` : '$0.00';
-      let rem = q.limit ? `$${(q.limit-q.used).toFixed(2)}` : 'Unknown';
-      let color = (q.limit && (q.limit-q.used)<1.0) ? '#f44336' : (q.limit ? '#4caf50' : '#888');
-      if (q.error) return `<tr><td>${q.email}</td><td colspan="3" style="color:#f44336">${q.error}</td></tr>`;
-      return `<tr><td>${q.email}</td><td>${lim}</td><td>${used}</td><td style="color:${color};font-weight:bold">${rem}</td></tr>`;
-    }).join('');
-  } catch(e) {
-    tb.innerHTML = '<tr><td colspan="4" style="color:#f44336;text-align:center">Failed to load quotas</td></tr>';
-  }
-}
-
-// ── Settings ──────────────────────────────────────────────────────────────────
-async function changePassword() {
-  const pw = document.getElementById('new-pw').value;
-  const confirm = document.getElementById('confirm-pw').value;
-  const msg = document.getElementById('settings-msg');
-  if (!pw) { msg.textContent='Enter new password'; return; }
-  if (pw !== confirm) { msg.textContent='Passwords do not match'; return; }
-  const r = await fetch(`${API}/settings/password`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pw})});
-  if (r.ok) { msg.style.color='#4caf50'; msg.textContent='Password updated!'; }
-  else { msg.textContent='Error updating password'; }
-   }
-  // ── Settings ──────────────────────────────────────────────────────────────────
-  async function updateProxyLimit() {
-   const lim = document.getElementById('setting-proxy-limit').value;
-   const msg = document.getElementById('limit-msg');
-   if (!lim || lim < 1) return;
-   const r = await fetch(`${API}/settings/proxy-limit`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({limit:lim})});
-   if (r.ok) { msg.style.color='#4caf50'; msg.textContent='Proxy limit updated!'; setTimeout(()=>msg.textContent='',3000); }
-   else { msg.style.color='#f44336'; msg.textContent='Error saving limit'; }
-  }
-
-  async function loadSettings() {
-   try {
-     const d = await fetch(`${API}/settings`).then(r=>r.json());
-     if (d && d.proxy_limit) {
-       document.getElementById('setting-proxy-limit').value = d.proxy_limit;
-     }
-   } catch(e) {}
-  }
-  // ── Helpers ───────────────────────────────────────────────────────────────────
-   function numFmt(n) { return (n||0).toLocaleString(); }
-  function copyText(text) {
-   navigator.clipboard.writeText(text).then(()=>{ /* copied */ }).catch(()=>{ prompt('Copy:',text); });
-  }
-  // Init
-   checkAuth();
-  </script>
-  </body>
-  </html>
+<script src="/assets/app.js"></script>
+</body>
+</html>
