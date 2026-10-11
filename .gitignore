@@ -39,3 +39,6 @@ share-out/
 .idea/
 .vscode/
 *.swp
+
+# macOS 在 exFAT 卷上生成的资源叉垃圾（._ 前缀）
+._*

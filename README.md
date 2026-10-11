@@ -32,7 +32,7 @@ python-dotenv
 ## 快速开始
 
 ```bash
-git clone https://<你的仓库地址>.git
+git clone <你的仓库地址>
 cd mistral-router
 
 make setup
