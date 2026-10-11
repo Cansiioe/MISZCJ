@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -375,6 +376,18 @@ func (a *AdminHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		a.handleScheduling(w, r)
 
+	case path == "/alerts" && r.Method == http.MethodGet:
+		if !a.auth(w, r) {
+			return
+		}
+		a.handleAlerts(w, r)
+
+	case path == "/accounts/revive-all" && r.Method == http.MethodPost:
+		if !a.auth(w, r) {
+			return
+		}
+		a.handleReviveAll(w, r)
+
 	case path == "/logs/cleanup" && r.Method == http.MethodPost:
 		if !a.auth(w, r) {
 			return
@@ -617,6 +630,26 @@ func (a *AdminHandler) handleScheduling(w http.ResponseWriter, r *http.Request) 
 	out["weights"] = a.proxy.Weights()
 	out["proxy_limit"] = a.store.GetSetting("proxy_limit")
 	writeJSON(w, out)
+}
+
+// handleAlerts 返回告警配置状态；?test=1 时顺带发一条测试告警。
+func (a *AdminHandler) handleAlerts(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Query().Get("test") == "1" {
+		a.proxy.alerter.Send("manual_test", "info", "测试告警",
+			"来自 Mistral 路由控制台的测试消息，收到即表示 Webhook 配置正确。")
+	}
+	writeJSON(w, a.proxy.alerter.Status())
+}
+
+// handleReviveAll 立即探测所有失效账号，可用的自动复活。
+func (a *AdminHandler) handleReviveAll(w http.ResponseWriter, r *http.Request) {
+	n := a.store.AutoReviveDeadAccounts()
+	if n > 0 {
+		a.proxy.Reload()
+		a.proxy.alerter.Send("auto_revive", "info", "账号已自动恢复",
+			fmt.Sprintf("%d 个失效账号探测可用，已重新加入轮询。", n))
+	}
+	writeJSON(w, map[string]interface{}{"revived": n})
 }
 
 // modelsInfo 返回模型白名单、配置文件元数据，以及每个模型的能力矩阵。

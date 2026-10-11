@@ -77,6 +77,15 @@ func main() {
 	proxy.SetModelFilter(loadModelFilter(modelsFile))
 	proxy.Reload()
 
+	// 失效账号自动恢复（可选）
+	autoReviveMin := 0
+	if v := os.Getenv("AUTO_REVIVE_MINUTES"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			autoReviveMin = n
+		}
+	}
+	startAutoRevive(store, proxy, autoReviveMin)
+
 	// 初始化注册机管理器
 	farm := NewFarmManager(store, farmDir, dataDir)
 

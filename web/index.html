@@ -97,6 +97,10 @@
             <div class="card-desc">当前 <span id="acct-count">0</span> 个 · 认证失败会自动移入失效</div>
           </div>
           <div class="flex gap-2">
+            <button class="btn btn-sm" onclick="reviveAll()" title="探测所有失效账号，可用的自动恢复">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
+              恢复失效账号
+            </button>
             <button class="btn btn-sm" onclick="loadQuota(true)">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
               查询额度
@@ -339,6 +343,14 @@
             </div>
             <div class="hint">0 = 不清理。服务启动时与每 6 小时也会按 LOG_RETENTION_DAYS 自动执行</div>
           </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">告警通知</div>
+            <button class="btn btn-sm" onclick="testAlert()">发送测试</button>
+          </div>
+          <div id="alert-status"></div>
         </div>
 
         <div class="card">

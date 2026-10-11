@@ -1197,11 +1197,60 @@ async function renderSettings() {
     const s = await get('/settings');
     $('#set-proxy-limit').value = s.proxy_limit || '1';
   } catch {}
+  await renderAlertStatus();
   const base = location.origin + '/v1';
   const a = $('#set-base-url'), b = $('#set-base-url-2');
   if (a) a.textContent = base;
   if (b) b.textContent = base;
   applyTheme(currentTheme());
+}
+
+/** 告警配置状态 */
+async function renderAlertStatus() {
+  const box = $('#alert-status');
+  if (!box) return;
+  const KIND = { generic: '通用 JSON', wecom: '企业微信', dingtalk: '钉钉', feishu: '飞书', telegram: 'Telegram' };
+  try {
+    const a = await get('/alerts');
+    box.innerHTML = a.enabled
+      ? `<div class="list-row"><span class="lr-label">状态</span><span class="badge badge-success">已启用</span></div>
+         <div class="list-row"><span class="lr-label">格式</span><span>${esc(KIND[a.kind] || a.kind)}</span></div>
+         <div class="list-row"><span class="lr-label">已发送 / 失败</span><span class="tabular">${num(a.sent)} / ${num(a.failed)}</span></div>
+         <div class="list-row"><span class="lr-label">同类去重窗口</span><span>${esc(a.min_gap)}</span></div>`
+      : `<div class="empty" style="padding:24px 0">
+           <div class="e-title">未配置告警</div>
+           <div class="e-desc">设好 ALERT_WEBHOOK_URL 后，账号池全挂、账号失效、自动恢复等事件会推到 Webhook</div>
+         </div>`;
+  } catch (e) {
+    box.innerHTML = `<div class="text-xs text-muted">读取失败：${esc(e.message)}</div>`;
+  }
+}
+
+async function testAlert() {
+  try {
+    const a = await get('/alerts?test=1');
+    if (!a.enabled) return toast('warning', '未配置 Webhook', '请先设置 ALERT_WEBHOOK_URL');
+    toast('success', '测试告警已发送', '查看你的机器人是否收到');
+    setTimeout(renderAlertStatus, 1500);
+  } catch (e) {
+    toast('error', '测试失败', e.message);
+  }
+}
+
+/** 立即探测失效账号并恢复可用的 */
+async function reviveAll() {
+  toast('info', '正在探测失效账号…', '逐个用 API Key 打上游，约几秒');
+  try {
+    const r = await post('/accounts/revive-all');
+    if (r.revived > 0) {
+      toast('success', `已恢复 ${r.revived} 个账号`, '它们重新加入了轮询');
+      renderAccounts();
+    } else {
+      toast('info', '没有可恢复的账号', '失效账号探测后仍然不可用');
+    }
+  } catch (e) {
+    toast('error', '恢复失败', e.message);
+  }
 }
 
 /** 清理早于 N 天的调用日志 */

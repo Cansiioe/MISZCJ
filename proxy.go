@@ -47,6 +47,7 @@ type Proxy struct {
 	client   *http.Client
 	filter   *ModelFilter
 	limiter  *rateLimiter
+	alerter  *Alerter
 
 	// 加权轮询状态
 	lastIdx        int
@@ -63,6 +64,7 @@ func NewProxy(store *Store) *Proxy {
 		client:  newUpstreamClient(),
 		filter:  &ModelFilter{},
 		limiter: newRateLimiter(),
+		alerter: newAlerter(),
 	}
 }
 
@@ -153,9 +155,16 @@ func (p *Proxy) SetModelFilter(f *ModelFilter) {
 
 func (p *Proxy) Reload() {
 	p.mu.Lock()
-	defer p.mu.Unlock()
 	p.accounts = p.store.GetAliveAccounts()
-	log.Printf("proxy: 已加载 %d 个账号", len(p.accounts))
+	n := len(p.accounts)
+	p.mu.Unlock()
+	log.Printf("proxy: 已加载 %d 个账号", n)
+
+	// 账号池空了必须立刻告警——这时所有下游请求都会拿到 503
+	if n == 0 && p.alerter != nil {
+		p.alerter.Send("pool_empty", "critical", "账号池已空",
+			"所有账号都不可用，/v1 请求会返回 503。请检查账号状态，或跑一轮注册机。")
+	}
 }
 
 type ProxyStatus struct {
@@ -418,6 +427,10 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 			log.Printf("proxy: 账号 %d 已失效: %s", acct.ID, errMsg)
 			p.store.MarkDead(acct.ID, errMsg)
+			if p.alerter != nil {
+				p.alerter.Send(fmt.Sprintf("dead:%d", acct.ID), "warning", "账号失效",
+					fmt.Sprintf("%s 认证失败：%s", acct.Email, errMsg))
+			}
 			p.Reload()
 			continue
 		}

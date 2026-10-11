@@ -386,6 +386,47 @@ LOG_RETENTION_DAYS=30   # 0 = 永久保留
 
 也可以在「设置 → 日志保留」里手动触发。查询时 `keep_days=0` 表示不清理。
 
+### 告警与自愈
+
+**告警通知**：关键事件推到 Webhook，支持企业微信 / 钉钉 / 飞书 / Telegram / 通用 JSON。
+
+```bash
+ALERT_WEBHOOK_URL=https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx
+ALERT_WEBHOOK_TYPE=wecom     # generic(默认) / wecom / dingtalk / feishu / telegram
+ALERT_TELEGRAM_TOKEN=...     # 仅 telegram
+ALERT_TELEGRAM_CHAT=...
+```
+
+触发的事件：
+
+| 事件 | 级别 | 说明 |
+|------|------|------|
+| 账号池已空 | critical | 所有账号不可用，`/v1` 会返回 503 |
+| 账号失效 | warning | 单个账号认证失败被移出轮询 |
+| 账号自动恢复 | info | 失效账号探测后重新可用 |
+
+同类告警 **10 分钟内只发一次**（按事件 key 去重），避免故障期间刷屏。设置页有「发送测试」按钮。
+
+> 告警的 HTTP 客户端**不走** `MISTRAL_PROXY`——企业微信/钉钉/飞书在国内直连即可，
+> 而代理通常不转发 `127.0.0.1` 这类地址（我一开始复用了模型探测的 transport，
+> 本地接收端直接 502）。需要走代理的场景（Telegram）设 `ALERT_USE_PROXY=1`。
+
+**失效账号自动恢复**：
+
+```bash
+AUTO_REVIVE_MINUTES=30   # 0 = 关闭
+```
+
+账号被判死的原因不都是真死——网络抖动、代理临时不通、上游 5xx 都会让某次请求拿到
+401/403，账号就此闲置。这个任务每 N 分钟用 API Key 打一次 `/v1/models`，能通就自动复活。
+
+账号页也有「恢复失效账号」按钮可手动触发，实测：
+
+```
+标记 2 个账号为失效 → 触发扫描 → {"revived":2} → 失效 0 / 存活 3
+并推送告警：账号已自动恢复: 2 个失效账号探测可用，已重新加入轮询。
+```
+
 ### 界面技术
 
 前端是零构建的静态资源（`web/index.html` + `app.css` + `app.js`），由 Go 二进制 embed
