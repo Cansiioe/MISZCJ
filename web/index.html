@@ -354,6 +354,31 @@
         </div>
 
         <div class="card">
+          <div class="card-head"><div class="card-title">数据导出</div></div>
+          <div class="hint mb-3">用于备份或迁移，直接下载文件</div>
+          <div class="flex flex-wrap gap-2">
+            <button class="btn btn-sm" onclick="doExport('accounts','json')">账号 JSON</button>
+            <button class="btn btn-sm" onclick="doExport('accounts','csv')">账号 CSV</button>
+            <button class="btn btn-sm" onclick="doExport('keys','json')">密钥 JSON</button>
+            <button class="btn btn-sm" onclick="doExport('keys','csv')">密钥 CSV</button>
+            <button class="btn btn-sm" onclick="doExport('logs','csv')">日志 CSV</button>
+          </div>
+          <div class="hint mt-3">密钥 CSV 含完整密钥，注意妥善保管</div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">清理过期密钥</div>
+            <button class="btn btn-sm btn-danger" onclick="purgeKeys()">清理</button>
+          </div>
+          <div class="field" style="margin-bottom:0">
+            <label>删除过期超过 N 天的密钥</label>
+            <input class="input" type="number" id="set-purge-days" value="30" min="1" style="width:110px">
+            <div class="hint">只清理「设了有效期且已过期」的密钥，手动停用的不受影响</div>
+          </div>
+        </div>
+
+        <div class="card">
           <div class="card-head"><div class="card-title">外观</div></div>
           <div class="flex items-center justify-between">
             <div>

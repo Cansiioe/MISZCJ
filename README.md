@@ -442,6 +442,35 @@ AUTO_REVIVE_MINUTES=30   # 0 = 关闭
 并推送告警：账号已自动恢复: 2 个失效账号探测可用，已重新加入轮询。
 ```
 
+### 跨域、导出与清理
+
+**CORS**：浏览器可以直接调 `/v1`（默认允许所有来源），只挂在 `/v1` 上——
+管理后台是同源访问，不需要跨域头，少开一个口子。
+
+```bash
+CORS_ORIGINS=*                              # 默认
+CORS_ORIGINS=https://app.example.com,https://foo.dev   # 限定来源
+```
+
+预检请求（`OPTIONS`）返回 204 并带上 `Allow-Methods` / `Allow-Headers` / `Max-Age`。
+
+**数据导出**：`GET /admin/api/export?type=accounts|keys|logs&format=json|csv`
+
+| type | 内容 | 条数上限 |
+|------|------|---------|
+| `accounts` | 账号（含存活与失效）、调用量、实测额度 | 全部 |
+| `keys` | 密钥及其策略、用量、状态 | 全部 |
+| `logs` | 调用日志 | 5000（`limit` 可调，上限 10000） |
+
+设置页有对应的下载按钮。CSV 用 `Content-Disposition` 直接触发下载，文件名带时间戳。
+
+> 密钥 CSV 含**完整密钥**，注意保管。
+
+**过期密钥清理**：`POST /admin/api/keys/purge-expired {"older_than_days":30}`
+
+只删除「设了有效期且已过期超过 N 天」的密钥。**手动停用（`active=0`）的不会被碰**——
+那可能是刻意保留的。留缓冲期也是避免刚过期就删、不好回溯。
+
 ### 界面技术
 
 前端是零构建的静态资源（`web/index.html` + `app.css` + `app.js`），由 Go 二进制 embed

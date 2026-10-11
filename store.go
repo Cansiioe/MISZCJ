@@ -746,6 +746,24 @@ func (s *Store) DeleteRouterKey(key string) {
 	s.db.Exec("DELETE FROM router_keys WHERE key=?", key)
 }
 
+// PurgeExpiredKeys 删除已过期超过 N 天的密钥，返回删除数量。
+// 只动「明确设了有效期且已过期」的密钥；手动停用（active=0）的不会被碰，
+// 因为那可能是用户刻意保留的。留个缓冲期也是避免刚过期就删、不好回溯。
+func (s *Store) PurgeExpiredKeys(olderThanDays int) int64 {
+	if olderThanDays <= 0 {
+		olderThanDays = 30
+	}
+	res, err := s.db.Exec(`DELETE FROM router_keys
+		WHERE COALESCE(expires_at,'') != '' AND expires_at < datetime('now', ?)`,
+		fmt.Sprintf("-%d days", olderThanDays))
+	if err != nil {
+		log.Printf("清理过期密钥失败: %v", err)
+		return 0
+	}
+	n, _ := res.RowsAffected()
+	return n
+}
+
 // KeyAuth 鉴权结果，Reason/Code 直接回给调用方。
 type KeyAuth struct {
 	OK     bool

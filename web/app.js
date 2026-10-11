@@ -1289,6 +1289,32 @@ async function cleanupLogs() {
   }
 }
 
+/** 导出数据：直接触发浏览器下载 */
+function doExport(type, format) {
+  const a = document.createElement('a');
+  a.href = `${API}/export?type=${type}&format=${format}`;
+  a.download = '';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  toast('success', '已开始下载', `${type} 的 ${format.toUpperCase()} 文件`);
+}
+
+/** 清理过期密钥 */
+async function purgeKeys() {
+  const days = parseInt($('#set-purge-days').value, 10) || 30;
+  const ok = await confirmBox('清理过期密钥',
+    `将删除「已过期超过 ${days} 天」的密钥。手动停用的密钥不会被删除。`, true);
+  if (!ok) return;
+  try {
+    const r = await post('/keys/purge-expired', { older_than_days: days });
+    toast('success', '清理完成', `删除 ${num(r.deleted)} 把过期密钥`);
+    renderKeys();
+  } catch (e) {
+    toast('error', '清理失败', e.message);
+  }
+}
+
 async function saveProxyLimit() {  const lim = $('#set-proxy-limit').value;
   try {
     await post('/settings/proxy-limit', { limit: lim });

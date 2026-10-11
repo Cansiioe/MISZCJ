@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -376,6 +377,18 @@ func (a *AdminHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		a.handleScheduling(w, r)
 
+	case path == "/export" && r.Method == http.MethodGet:
+		if !a.auth(w, r) {
+			return
+		}
+		a.handleExport(w, r)
+
+	case path == "/keys/purge-expired" && r.Method == http.MethodPost:
+		if !a.auth(w, r) {
+			return
+		}
+		a.handlePurgeExpiredKeys(w, r)
+
 	case path == "/proxies" && r.Method == http.MethodGet:
 		if !a.auth(w, r) {
 			return
@@ -661,7 +674,105 @@ func (a *AdminHandler) handleReviveAll(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]interface{}{"revived": n})
 }
 
-// modelsInfo 返回模型白名单、配置文件元数据，以及每个模型的能力矩阵。
+// handleExport 导出账号 / 密钥 / 日志，支持 JSON 与 CSV。
+// 用途：备份、迁移、或丢进表格里分析。
+func (a *AdminHandler) handleExport(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	kind := q.Get("type")
+	format := q.Get("format")
+	if format == "" {
+		format = "json"
+	}
+
+	var header []string
+	var rows [][]string
+	var payload interface{}
+
+	switch kind {
+	case "accounts":
+		header = []string{"id", "email", "api_key", "source", "is_dead", "dead_reason",
+			"added_at", "requests", "total_tokens", "rate_limit_req", "last_used_at"}
+		all := append(a.store.GetAccountsWithStats(false), a.store.GetAccountsWithStats(true)...)
+		for _, x := range all {
+			rows = append(rows, []string{
+				strconv.Itoa(x.ID), x.Email, x.APIKey, x.Source,
+				boolStr(x.IsDead), x.DeadReason, x.AddedAt,
+				strconv.FormatInt(x.Requests, 10), strconv.FormatInt(x.TotalTokens, 10),
+				strconv.Itoa(x.RateLimitReq), x.LastUsedAt,
+			})
+		}
+		payload = all
+	case "keys":
+		header = []string{"key", "label", "state", "active", "created_at", "expires_at",
+			"quota_tokens", "used_tokens", "requests", "allowed_models", "allowed_ips", "last_used_at"}
+		keys := a.store.GetRouterKeys()
+		for _, k := range keys {
+			rows = append(rows, []string{
+				k.Key, k.Label, k.State, boolStr(k.Active), k.CreatedAt, k.ExpiresAt,
+				strconv.FormatInt(k.QuotaTokens, 10), strconv.FormatInt(k.UsedTokens, 10),
+				strconv.FormatInt(k.Requests, 10), k.AllowedModels, k.AllowedIPs, k.LastUsedAt,
+			})
+		}
+		payload = keys
+	case "logs":
+		header = []string{"id", "ts", "key_prefix", "account_email", "ip", "model",
+			"prompt_tokens", "completion_tokens", "total_tokens", "status", "error_code",
+			"error_message", "latency_ms"}
+		limit, _ := strconv.Atoi(q.Get("limit"))
+		if limit <= 0 || limit > 10000 {
+			limit = 5000
+		}
+		items, _ := a.store.QueryLogs(LogQuery{Limit: limit})
+		for _, l := range items {
+			rows = append(rows, []string{
+				strconv.Itoa(l.ID), l.Ts, l.KeyPrefix, l.AccountEmail, l.IP, l.Model,
+				strconv.Itoa(l.PromptTokens), strconv.Itoa(l.CompletionTokens), strconv.Itoa(l.TotalTokens),
+				strconv.Itoa(l.Status), l.ErrorCode, l.ErrorMessage, strconv.Itoa(l.LatencyMs),
+			})
+		}
+		payload = items
+	default:
+		w.WriteHeader(400)
+		writeJSON(w, map[string]string{"error": "type 需为 accounts / keys / logs"})
+		return
+	}
+
+	if format == "csv" {
+		w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+		w.Header().Set("Content-Disposition",
+			fmt.Sprintf("attachment; filename=%s-%s.csv", kind, time.Now().Format("20060102-150405")))
+		cw := csv.NewWriter(w)
+		cw.Write(header)
+		cw.WriteAll(rows)
+		cw.Flush()
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Disposition",
+		fmt.Sprintf("attachment; filename=%s-%s.json", kind, time.Now().Format("20060102-150405")))
+	json.NewEncoder(w).Encode(payload)
+}
+
+func boolStr(b bool) string {
+	if b {
+		return "1"
+	}
+	return "0"
+}
+
+// handlePurgeExpiredKeys 清理已过期超过 N 天的密钥。
+func (a *AdminHandler) handlePurgeExpiredKeys(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		OlderThanDays int `json:"older_than_days"`
+	}
+	json.NewDecoder(r.Body).Decode(&body)
+	if body.OlderThanDays <= 0 {
+		body.OlderThanDays = 30
+	}
+	n := a.store.PurgeExpiredKeys(body.OlderThanDays)
+	writeJSON(w, map[string]interface{}{"deleted": n, "older_than_days": body.OlderThanDays})
+}
 func (a *AdminHandler) modelsInfo() map[string]interface{} {
 	f := a.proxy.filter
 	out := map[string]interface{}{

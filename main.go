@@ -96,7 +96,7 @@ func main() {
 	mux := http.NewServeMux()
 
 	// OpenAI 兼容接口
-	mux.HandleFunc("/v1/", proxy.ServeHTTP)
+	mux.Handle("/v1/", corsMiddleware(http.HandlerFunc(proxy.ServeHTTP)))
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(200)
 		fmt.Fprint(w, "ok")
@@ -138,6 +138,42 @@ func main() {
 	if err := http.ListenAndServe(addr, recoverMiddleware(mux)); err != nil {
 		log.Fatalf("服务启动失败: %v", err)
 	}
+}
+
+// corsMiddleware 让浏览器能直接调 /v1（默认允许所有来源）。
+//
+// 只挂在 /v1 上：管理后台是同源访问，不需要跨域头，少开一个口子。
+// 生产环境建议用 CORS_ORIGINS 限定来源，例如 CORS_ORIGINS=https://app.example.com。
+func corsMiddleware(next http.Handler) http.Handler {
+	raw := getEnv("CORS_ORIGINS", "*")
+	allowAll := strings.TrimSpace(raw) == "*"
+	allowed := map[string]bool{}
+	if !allowAll {
+		for _, o := range strings.Split(raw, ",") {
+			if o = strings.TrimSpace(o); o != "" {
+				allowed[o] = true
+			}
+		}
+	}
+	if !allowAll {
+		log.Printf("CORS: 仅允许来源 %s", raw)
+	}
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		origin := r.Header.Get("Origin")
+		if origin != "" && (allowAll || allowed[origin]) {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Vary", "Origin")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
+			w.Header().Set("Access-Control-Max-Age", "86400")
+		}
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // recoverMiddleware 兜住 handler 里的 panic。
