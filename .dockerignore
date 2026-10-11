@@ -1,0 +1,40 @@
+# 密钥与运行时数据绝不能进镜像
+.env
+.env.*
+!.env.example
+!.env.farm.example
+data/
+results/
+results.json
+config/proxies.ranked.txt
+config/proxies.txt
+*.db
+*.log
+
+# 构建产物
+bin/
+dist/
+share-out/
+*.tar.gz
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+
+# 版本控制与编辑器
+.git/
+.github/
+.gitignore
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# 测试与文档（镜像里用不到）
+*_test.go
+docs/
+
+# exFAT 卷上的 macOS 资源叉文件
+._*

@@ -11,7 +11,7 @@ PIP   := .venv/bin/pip
 N ?= 2
 C ?= 2
 
-.PHONY: help setup venv deps env proxies smoke farm router build-router clean check
+.PHONY: help setup venv deps env proxies smoke farm router build-router clean check test docker docker-up docker-down
 
 help:
 	@echo "可用目标:"
@@ -19,8 +19,12 @@ help:
 	@echo "  make smoke          # 注册 2 个账号，并发 2"
 	@echo "  make farm N=20 C=8  # 注册 N 个账号，并发 C"
 	@echo "  make check          # 检查依赖导入和环境变量"
+	@echo "  make test           # 跑 Go 单元测试"
 	@echo "  make build-router   # 编译 bin/mistral-router"
 	@echo "  make router         # 在 :7623 启动路由器"
+	@echo "  make docker         # 构建镜像"
+	@echo "  make docker-up      # docker compose 起服务"
+	@echo "  make docker-down    # 停掉服务"
 	@echo "  make clean          # 清理 venv 和构建产物（保留 .env）"
 
 setup: venv deps env proxies
@@ -71,6 +75,21 @@ build-router:
 
 router: build-router
 	FARM_DIR="$(CURDIR)" DATA_DIR="$(CURDIR)/data" ./bin/mistral-router
+
+test:
+	@go test ./...
+	@echo "单元测试通过"
+
+docker:
+	docker build -t mistral-router:latest .
+	@echo "已构建 mistral-router:latest"
+
+docker-up:
+	docker compose up -d
+	@echo "已启动；访问 http://127.0.0.1:7623/admin/"
+
+docker-down:
+	docker compose down
 
 clean:
 	rm -rf .venv bin __pycache__ http_farm/__pycache__

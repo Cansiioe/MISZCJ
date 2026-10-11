@@ -298,6 +298,57 @@ FARM_DIR=$PWD DATA_DIR=$PWD/data ./bin/mistral-router
 > 提示：国内网络编译时若 `proxy.golang.org` 超时，先设置
 > `export GOPROXY=https://goproxy.cn,direct`。
 
+## Docker 部署
+
+路由器与注册机打进**同一个镜像**——router 需要拉起 `farm_http.py`，拆成两个容器
+反而要额外处理进程通信和共享目录。
+
+```bash
+cp .env.example .env      # 填 ADMIN_PASSWORD / 取码通道 / 代理
+make docker               # 构建镜像
+make docker-up            # docker compose up -d
+# → http://127.0.0.1:7623/admin/
+```
+
+或者直接用 compose：
+
+```bash
+docker compose up -d
+docker compose logs -f
+```
+
+要点：
+
+| 项 | 说明 |
+|---|---|
+| 多阶段构建 | Go 静态编译（`CGO_ENABLED=0`）→ `python:3.12-slim` 运行，最终镜像不含 Go 工具链 |
+| 端口 | 默认只绑 `127.0.0.1:7623`；公网暴露请在前面加反向代理并启用鉴权 |
+| 数据持久化 | `./data`（SQLite 与日志）、`./results`（注册机批次）、`./config`（代理与白名单）都挂到宿主机 |
+| 健康检查 | 每 30 秒打一次 `/healthz` |
+| 日志轮转 | json-file 驱动，单文件 10MB × 3 份 |
+| 密钥 | `.dockerignore` 已排除 `.env` / `proxies.ranked.txt` / `*.db`，镜像里不会带任何凭据 |
+
+**容器访问宿主机代理**：compose 里默认 `MISTRAL_PROXY=http://host.docker.internal:7890`，
+并加了 `extra_hosts: host.docker.internal:host-gateway`（Linux 也能解析）。
+Linux 上如果仍不通，把 `network_mode` 改成 `host`，或直接填宿主机真实 IP。
+
+## 单元测试
+
+```bash
+make test        # 等价于 go test ./...
+```
+
+覆盖纯逻辑部分：模型白名单匹配与通配、SSE usage 解析、密钥策略（有效期 / 配额 /
+模型与 IP 白名单）、密钥状态推导、账号统计、日志筛选与清理、令牌桶限流、
+代理池的轮询 / 拉黑 / 到期解封。
+
+> 这套测试上线后立刻抓到过一个真 bug：`keyState` 用 `time.Parse`（默认按 UTC 解析）
+> 却拿本地时间比较，在东八区会让密钥过期判断**晚 8 小时**才生效。现在写入与解析
+> 统一用 UTC。
+>
+> 注意：如果你在修复前就设过带有效期的密钥，那些 `expires_at` 存的是本地时间，
+> 升级后会被当作 UTC 解析（提前 8 小时过期）。重新设置一次即可，或手工把旧值加 8 小时。
+
 ## 控制台
 
 管理界面在 `http://127.0.0.1:7623/admin/`，共 9 个页面：

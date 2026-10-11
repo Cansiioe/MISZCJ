@@ -1,0 +1,40 @@
+services:
+  mistral-router:
+    build: .
+    image: mistral-router:latest
+    container_name: mistral-router
+    restart: unless-stopped
+    ports:
+      # 只绑本机；公网暴露请在前面加反向代理并启用鉴权
+      - "127.0.0.1:7623:7623"
+    env_file:
+      # .env 里放 ADMIN_PASSWORD / 取码通道 / 代理等配置
+      - .env
+    environment:
+      TZ: Asia/Shanghai
+      # 容器内访问宿主机代理：Mac/Windows 用 host.docker.internal，
+      # Linux 需要把 network_mode 改成 host 或用宿主机真实 IP
+      MISTRAL_PROXY: ${MISTRAL_PROXY:-http://host.docker.internal:7890}
+      LOG_RETENTION_DAYS: ${LOG_RETENTION_DAYS:-30}
+      # 需要的话在 .env 里覆盖；这里给个保守默认
+      UPSTREAM_REQ_PER_MINUTE: ${UPSTREAM_REQ_PER_MINUTE:-0}
+    volumes:
+      # 数据库与日志持久化
+      - ./data:/app/data
+      - ./results:/app/results
+      # 代理列表与模型白名单可直接改宿主机文件，重启生效
+      - ./config:/app/config
+    extra_hosts:
+      # 让 host.docker.internal 在 Linux 上也能解析
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:7623/healthz"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
