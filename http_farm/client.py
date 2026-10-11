@@ -1,4 +1,4 @@
-"""HTTP client for Mistral Ory auth + console/admin billing key APIs."""
+"""Mistral Ory 认证 + console/admin 计费密钥接口的 HTTP 客户端。"""
 from __future__ import annotations
 
 import random
@@ -11,8 +11,9 @@ import requests
 from requests.adapters import HTTPAdapter
 
 from . import config
-from .imap_otp import wait_otp
+from .otp import create_mailbox, needs_precreate, wait_otp
 
+# 注册时随机取的英文名（Mistral 注册页要求英文姓名，故保留英文）
 FIRST_NAMES = [
     "John", "Jane", "Alex", "Sam", "Chris", "Emma", "Noah", "Mia",
     "Lucas", "Lily", "Ryan", "Sofia", "Ethan", "Zoe", "Oliver",
@@ -24,6 +25,7 @@ LAST_NAMES = [
     "Martin", "Thompson", "Garcia", "Martinez", "Robinson", "Clark",
 ]
 
+# 注意：这些关键词会被重试逻辑匹配，不能改动
 _TRANSIENT = ("429", "rate", "timeout", "proxy", "connection", "connect", "timed out")
 
 
@@ -99,8 +101,10 @@ class MistralHTTPClient:
         self.last_name: str | None = None
         self.api_key: str | None = None
         self.key_id: str | None = None
+        # 邮件 API 服务 按 mailboxId 查邮件；其他通道保持 None
+        self.mailbox_id: str | None = None
 
-    # ---- proxy ----
+    # ---- 代理 ----
     def _apply_proxy(self, proxy: str | None) -> None:
         self.proxy = proxy
         if proxy:
@@ -171,9 +175,9 @@ class MistralHTTPClient:
                     break
                 self.rotate_proxy(str(e)[:60])
                 time.sleep(config.RETRY_429_BASE_S * i)
-        raise RuntimeError(f"{method} {url} failed: {last}")
+        raise RuntimeError(f"{method} {url} 请求失败: {last}")
 
-    # ---- registration ----
+    # ---- 注册 ----
     def register(
         self,
         email: str | None = None,
@@ -196,7 +200,7 @@ class MistralHTTPClient:
             try:
                 r = self._request_with_rotate("GET", f"{config.AUTH_BASE}/self-service/registration/api")
                 if r.status_code != 200:
-                    raise RuntimeError(f"registration/api {r.status_code}: {r.text[:200]}")
+                    raise RuntimeError(f"registration/api 返回 {r.status_code}: {r.text[:200]}")
                 flow = r.json()
                 action = (flow.get("ui") or {}).get("action") or (
                     f"{config.AUTH_BASE}/self-service/registration?flow={flow['id']}"
@@ -210,7 +214,7 @@ class MistralHTTPClient:
                     "POST", action, json=body, headers={"Content-Type": "application/json"}
                 )
                 if r2.status_code not in (200, 201, 422):
-                    raise RuntimeError(f"register failed {r2.status_code}: {r2.text[:300]}")
+                    raise RuntimeError(f"注册失败 {r2.status_code}: {r2.text[:300]}")
                 data = r2.json()
 
                 st = data.get("session_token")
@@ -220,9 +224,10 @@ class MistralHTTPClient:
                             st = cw.get("ory_session_token")
                             break
                 if r2.status_code == 422 and not st:
-                    raise RuntimeError(f"register validation: {_flow_messages(data) or data}")
+                    # 保留 validation 关键词：farm.py 的重试策略依赖它
+                    raise RuntimeError(f"注册校验未通过 validation: {_flow_messages(data) or data}")
                 if not st:
-                    raise RuntimeError(f"register: no session_token: {list(data.keys())}")
+                    raise RuntimeError(f"注册响应里没有 session_token: {list(data.keys())}")
 
                 self.session_token = st
                 ver_flow = None
@@ -247,11 +252,11 @@ class MistralHTTPClient:
                     time.sleep(config.RETRY_429_BASE_S * attempt)
                     continue
                 raise
-        raise RuntimeError(f"register failed after {retries}: {last_err}")
+        raise RuntimeError(f"注册重试 {retries} 次后仍失败: {last_err}")
 
     def whoami(self) -> dict[str, Any]:
         if not self.session_token:
-            raise RuntimeError("no session_token")
+            raise RuntimeError("缺少 session_token")
         r = self._get(
             f"{config.AUTH_BASE}/sessions/whoami",
             headers={"Authorization": f"Bearer {self.session_token}"},
@@ -261,7 +266,7 @@ class MistralHTTPClient:
 
     def verify_email(self, code: str, flow_id: str | None = None) -> dict[str, Any]:
         if not self.session_token:
-            raise RuntimeError("verify_email: no session_token")
+            raise RuntimeError("verify_email: 缺少 session_token")
         headers = {"Authorization": f"Bearer {self.session_token}"}
 
         flow = None
@@ -287,17 +292,17 @@ class MistralHTTPClient:
             headers={**headers, "Content-Type": "application/json"},
         )
         if r2.status_code not in (200, 201, 422):
-            raise RuntimeError(f"verify failed {r2.status_code}: {r2.text[:300]}")
+            raise RuntimeError(f"邮箱验证失败 {r2.status_code}: {r2.text[:300]}")
         data = r2.json()
         addrs = (self.whoami().get("identity") or {}).get("verifiable_addresses") or []
         if not any(a.get("verified") for a in addrs):
-            raise RuntimeError(f"email still unverified: state={data.get('state')}")
+            raise RuntimeError(f"邮箱仍未验证通过: state={data.get('state')}")
         return data
 
     def login_browser_session(self, retries: int | None = None) -> None:
-        """Establish ory_session cookie for console/admin APIs."""
+        """为 console/admin 接口建立 ory_session cookie。"""
         if not self.email or not self.password:
-            raise RuntimeError("login_browser_session: email/password required")
+            raise RuntimeError("login_browser_session: 需要 email/password")
         attempts = retries if retries is not None else max(1, config.LOGIN_RETRIES)
         last_err: Exception | None = None
 
@@ -311,19 +316,20 @@ class MistralHTTPClient:
                     timeout=self.timeout,
                 )
                 if _is_rate_limited(r):
-                    raise RuntimeError(f"login/browser rate-limited {r.status_code}: {r.text[:200]}")
+                    # 保留 rate 关键词：重试策略依赖它
+                    raise RuntimeError(f"login/browser 被限流 rate-limited {r.status_code}: {r.text[:200]}")
                 loc = r.headers.get("Location") or ""
                 if "flow=" not in loc:
                     raise RuntimeError(
-                        f"login/browser no flow redirect: {r.status_code} {loc or r.text[:80]}"
+                        f"login/browser 未跳转到 flow: {r.status_code} {loc or r.text[:80]}"
                     )
                 flow_id = parse_qs(urlparse(loc).query).get("flow", [None])[0]
                 if not flow_id:
-                    raise RuntimeError(f"login/browser bad location: {loc}")
+                    raise RuntimeError(f"login/browser 跳转地址异常: {loc}")
 
                 fr = self._get(f"{config.AUTH_BASE}/self-service/login/flows?id={flow_id}")
                 if _is_rate_limited(fr):
-                    raise RuntimeError(f"login/flows rate-limited: {fr.text[:200]}")
+                    raise RuntimeError(f"login/flows 被限流 rate-limited: {fr.text[:200]}")
                 fr.raise_for_status()
                 flow = fr.json()
                 csrf = self._csrf_from_flow(flow)
@@ -345,7 +351,7 @@ class MistralHTTPClient:
                     timeout=self.timeout,
                 )
                 if _is_rate_limited(r1):
-                    raise RuntimeError(f"identifier_first rate-limited: {r1.text[:200]}")
+                    raise RuntimeError(f"identifier_first 被限流 rate-limited: {r1.text[:200]}")
                 f2 = r1.json()
                 action2 = (f2.get("ui") or {}).get("action") or action
                 r2 = self.s.post(
@@ -360,12 +366,12 @@ class MistralHTTPClient:
                     timeout=self.timeout,
                 )
                 if _is_rate_limited(r2):
-                    raise RuntimeError(f"password login rate-limited {r2.status_code}: {r2.text[:200]}")
+                    raise RuntimeError(f"密码登录被限流 rate-limited {r2.status_code}: {r2.text[:200]}")
                 if r2.status_code not in (200, 201, 422):
-                    raise RuntimeError(f"password login failed {r2.status_code}: {r2.text[:300]}")
+                    raise RuntimeError(f"密码登录失败 {r2.status_code}: {r2.text[:300]}")
                 data = r2.json()
                 if "session" not in data and "session_token" not in data:
-                    raise RuntimeError(f"password login no session: {list(data.keys())}")
+                    raise RuntimeError(f"密码登录未返回会话: {list(data.keys())}")
                 if data.get("session_token"):
                     self.session_token = data["session_token"]
 
@@ -380,10 +386,10 @@ class MistralHTTPClient:
                 if any(x in msg for x in _TRANSIENT) or "rate-limited" in msg:
                     self.rotate_proxy(str(e)[:80])
                 time.sleep(config.RETRY_429_BASE_S * attempt)
-        raise RuntimeError(f"login_browser_session failed after {attempts} tries: {last_err}")
+        raise RuntimeError(f"login_browser_session 重试 {attempts} 次后仍失败: {last_err}")
 
     def _ensure_session(self) -> str:
-        """Ensure ory cookie + csrf exist; return csrf token."""
+        """确保 ory cookie 和 csrf 都已就绪，返回 csrf token。"""
         if not self._has_ory_session():
             self.login_browser_session(retries=2)
         csrf = self._csrf_cookie("admin") or self._csrf_cookie("console")
@@ -414,7 +420,7 @@ class MistralHTTPClient:
                             "Referer": f"{base}/",
                         },
                         timeout=self.timeout,
-                        allow_redirects=False,  # unauth redirects to Ory login JSON
+                        allow_redirects=False,  # 未认证时会 302 到 Ory 登录 JSON
                     )
                 except (requests.RequestException, OSError) as e:
                     last_err = e
@@ -422,7 +428,7 @@ class MistralHTTPClient:
 
                 text = r.text or ""
                 if _looks_unauthenticated(r.status_code, text):
-                    last_err = RuntimeError(f"create_key unauthenticated {r.status_code}")
+                    last_err = RuntimeError(f"创建密钥时未认证 create_key unauthenticated {r.status_code}")
                     try:
                         self.login_browser_session(retries=2)
                         self._seed_console_cookies()
@@ -436,11 +442,11 @@ class MistralHTTPClient:
                 try:
                     data = r.json()
                 except Exception:
-                    last_err = RuntimeError(f"create_key non-json {r.status_code}: {text[:120]}")
+                    last_err = RuntimeError(f"创建密钥返回非 JSON {r.status_code}: {text[:120]}")
                     continue
                 key = data.get("key") or data.get("api_key")
                 if not key:
-                    last_err = RuntimeError(f"create key missing secret keys={list(data.keys())[:8]}")
+                    last_err = RuntimeError(f"创建密钥响应里没有密钥 keys={list(data.keys())[:8]}")
                     try:
                         self.login_browser_session(retries=2)
                     except Exception as e:
@@ -458,12 +464,12 @@ class MistralHTTPClient:
                     self.login_browser_session(retries=2)
                 except Exception as e:
                     last_err = e
-        raise RuntimeError(f"create api key failed: {last_err}")
+        raise RuntimeError(f"创建 API 密钥失败: {last_err}")
 
     def smoke(self, api_key: str | None = None) -> int:
         key = api_key or self.api_key
         if not key:
-            raise RuntimeError("smoke: no api_key")
+            raise RuntimeError("smoke: 缺少 api_key")
         r = requests.get(
             f"{config.API_BASE}/v1/models",
             headers={"Authorization": f"Bearer {key}", "User-Agent": config.UA},
@@ -474,7 +480,7 @@ class MistralHTTPClient:
         return len((r.json()).get("data") or [])
 
     def farm_one(self) -> dict[str, Any]:
-        """register → OTP → verify → cookie session → create key → optional smoke."""
+        """注册 → 取验证码 → 验证邮箱 → 建立 cookie 会话 → 铸造密钥 → 可选冒烟测试。"""
         t0 = time.monotonic()
         stages: dict[str, float] = {}
 
@@ -484,8 +490,13 @@ class MistralHTTPClient:
             stages[name] = time.monotonic() - t
             return out
 
-        reg = timed("register", self.register)
-        code = timed("otp", lambda: wait_otp(self.email))
+        # 邮件 API 服务 / 自建邮箱服务 需要邮箱先存在才能收信，所以先建号再注册
+        email = random_email()
+        if needs_precreate():
+            self.mailbox_id = timed("create_mailbox", lambda: create_mailbox(email))
+
+        reg = timed("register", lambda: self.register(email=email))
+        code = timed("otp", lambda: wait_otp(self.email, mailbox_id=self.mailbox_id))
         timed("verify", lambda: self.verify_email(code, flow_id=reg.get("verification_flow_id")))
         timed("login_cookie", self.login_browser_session)
         timed("create_key", lambda: self.create_api_key(name=f"farm-{int(time.time()) % 100000}"))

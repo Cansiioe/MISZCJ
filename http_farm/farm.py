@@ -1,6 +1,6 @@
-"""Mistral HTTP farm runner — concurrent pure-HTTP account creation.
+"""Mistral HTTP 注册机 — 并发纯 HTTP 批量注册账号。
 
-Usage:
+用法:
   set -a; . ./.env; set +a
   python farm_http.py 20 8
   python -m http_farm.farm 20 8
@@ -51,9 +51,9 @@ def build_pool() -> ProxyPool | None:
         proxies = [config.PROXY_URL]
         used = "PROXY_URL"
     if not proxies:
-        log("WARN: no proxies loaded — bare IP (429 risk under concurrency)")
+        log("警告: 未加载任何代理 — 将使用本机 IP（并发下容易被 429 限流）")
         return None
-    log(f"proxy pool: {len(proxies)} from {used} ban_after={config.PROXY_BAN_AFTER}")
+    log(f"代理池: 共 {len(proxies)} 条，来源 {used}，封禁阈值={config.PROXY_BAN_AFTER}")
     return ProxyPool(proxies, ban_after=config.PROXY_BAN_AFTER)
 
 
@@ -118,12 +118,12 @@ def run_one(idx: int, total: int) -> dict:
                 _stats["ok"] += 1
                 ok, fail = _stats["ok"], _stats["fail"]
             rate = ok / max((time.monotonic() - _stats["start"]) / 60.0, 1e-6)
-            extra = f" try={attempt}" if attempt > 1 else ""
+            extra = f" 第{attempt}次尝试" if attempt > 1 else ""
             px = (result.get("proxy") or "")[-20:]
             log(
-                f"{tag} OK{extra} {result['email']} key=…{result['api_key'][-4:]} "
-                f"{result['elapsed_s']}s stages={result['stages']} "
-                f"models={result.get('models')} px=…{px} | total ok={ok} fail={fail} rate={rate:.2f}/min"
+                f"{tag} 成功{extra} {result['email']} key=…{result['api_key'][-4:]} "
+                f"{result['elapsed_s']}s 阶段={result['stages']} "
+                f"模型={result.get('models')} 代理=…{px} | 累计 成功={ok} 失败={fail} 速率={rate:.2f}/分钟"
             )
             result["_results_count"] = append_result(result, config.RESULTS_FILE)
             result["ok"] = True
@@ -133,14 +133,14 @@ def run_one(idx: int, total: int) -> dict:
             permanent = "validation" in str(e).lower() and "email" in str(e).lower()
             if permanent or attempt >= attempts:
                 break
-            log(f"{tag} retry {attempt}/{attempts} after {type(e).__name__}: {e}")
+            log(f"{tag} 重试 {attempt}/{attempts}，原因 {type(e).__name__}: {e}")
             time.sleep(0.5 * attempt)
 
     with _results_lock:
         _stats["fail"] += 1
         ok, fail = _stats["ok"], _stats["fail"]
     dt = round(time.monotonic() - t0, 2)
-    log(f"{tag} FAIL {type(last_err).__name__}: {last_err} ({dt}s) | ok={ok} fail={fail}")
+    log(f"{tag} 失败 {type(last_err).__name__}: {last_err}（{dt}s）| 成功={ok} 失败={fail}")
     return {
         "ok": False,
         "error": f"{type(last_err).__name__}: {last_err}",
@@ -151,7 +151,7 @@ def run_one(idx: int, total: int) -> dict:
 
 def main(argv: list[str] | None = None) -> int:
     global _pool
-    config.require_imap()
+    config.require_otp()
     max_n = config.MAX_ACCOUNTS
     conc = config.CONCURRENCY
     if argv:
@@ -161,8 +161,8 @@ def main(argv: list[str] | None = None) -> int:
             conc = max(1, min(int(argv[1]), 32))
 
     _pool = build_pool()
-    log(f"mistral-http-farm start max={max_n} concurrency={conc} domain={config.EMAIL_DOMAIN}")
-    log(f"results={config.RESULTS_FILE} batch_dir={config.BATCH_DIR}")
+    log(f"mistral-http-注册机 启动 目标数量={max_n} 并发={conc} 域名={config.EMAIL_DOMAIN} 取码通道={config.OTP_PROVIDER}")
+    log(f"结果文件={config.RESULTS_FILE} 批次目录={config.BATCH_DIR}")
     _stats.update(ok=0, fail=0, start=time.monotonic())
 
     ok_list: list[dict] = []
@@ -182,9 +182,9 @@ def main(argv: list[str] | None = None) -> int:
     rate = _stats["ok"] / max(elapsed / 60.0, 1e-6)
     sr = _stats["ok"] / max(1, _stats["ok"] + _stats["fail"])
     log(
-        f"DONE ok={_stats['ok']} fail={_stats['fail']} "
-        f"success_rate={sr:.1%} elapsed={elapsed:.1f}s rate={rate:.2f}/min "
-        f"batch={batch} proxies_alive={len(_pool) if _pool else 0}"
+        f"全部完成 成功={_stats['ok']} 失败={_stats['fail']} "
+        f"成功率={sr:.1%} 耗时={elapsed:.1f}s 速率={rate:.2f}/分钟 "
+        f"批次={batch} 可用代理={len(_pool) if _pool else 0}"
     )
     return 0 if _stats["ok"] > 0 or max_n == 0 else 1
 

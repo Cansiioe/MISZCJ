@@ -1,4 +1,4 @@
-"""Proxy pool — round-robin + ban + file load (grok-http-farm pattern)."""
+"""代理池 — 轮询 + 封禁 + 从文件加载。"""
 from __future__ import annotations
 
 import threading

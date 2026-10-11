@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CLI entry: python farm_http.py [max_accounts] [concurrency]"""
+"""命令行入口: python farm_http.py [账号数量] [并发数]"""
 from __future__ import annotations
 
 import sys

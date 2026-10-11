@@ -1,4 +1,4 @@
-"""Env/config for mistral HTTP farm."""
+"""Mistral HTTP 注册机的环境变量 / 配置。"""
 from __future__ import annotations
 
 import os
@@ -53,6 +53,33 @@ IMAP_HOST = _env("IMAP_HOST", "imap.example.com")
 IMAP_PORT = _env_int("IMAP_PORT", 993)
 EMAIL_DOMAIN = _env("EMAIL_DOMAIN").lstrip("@")
 
+# --- 取码通道: mailapi | selfhost | imap ---
+# 不显式设置 OTP_PROVIDER 时，按已填的凭据自动推断
+def _guess_provider() -> str:
+    if _env("MAILAPI_KEY"):
+        return "mailapi"
+    if _env("SELFHOST_BASE"):
+        return "selfhost"
+    return "imap"
+
+
+OTP_PROVIDER = _env("OTP_PROVIDER").lower() or _guess_provider()
+
+# --- 邮件 API 服务 ---
+MAILAPI_BASE = _env("MAILAPI_BASE", "https://em.example.com/api/v1").rstrip("/")
+MAILAPI_KEY = _env("MAILAPI_KEY")
+MAILAPI_DOMAIN_ID = _env_int("MAILAPI_DOMAIN_ID", 1)
+MAILAPI_EXPIRES_HOURS = _env_int("MAILAPI_EXPIRES_HOURS", 24)
+# 设 1 则创建永久邮箱（此时不传 expiresInHours）
+MAILAPI_PERMANENT = _env_bool("MAILAPI_PERMANENT", False)
+
+# --- 自建邮箱服务 ---
+SELFHOST_BASE = _env("SELFHOST_BASE").rstrip("/")
+SELFHOST_ADMIN = _env("SELFHOST_ADMIN")
+SELFHOST_PASSWORD = _env("SELFHOST_PASSWORD")
+# 注册前先调 addUser 建好邮箱（部署关闭了「无收件人仍收信」时必须开）
+SELFHOST_CREATE_USER = _env_bool("SELFHOST_CREATE_USER", True)
+
 MAX_ACCOUNTS = _env_int("MAX_ATTEMPTS", _env_int("MAX_ACCOUNTS", 10))
 CONCURRENCY = max(1, min(_env_int("CONCURRENCY", 8), 32))
 SPAWN_DELAY_S = _env_float("SPAWN_DELAY_S", 0.25)
@@ -63,7 +90,7 @@ ACCOUNT_RETRIES = max(1, _env_int("ACCOUNT_RETRIES", 2))
 LOGIN_RETRIES = _env_int("LOGIN_RETRIES", 4)
 RETRY_429_BASE_S = _env_float("RETRY_429_BASE_S", 1.5)
 
-# Prefer SKIP_SMOKE; SMOKE_MODELS kept for back-compat. Default: skip smoke.
+# 优先读 SKIP_SMOKE；SMOKE_MODELS 仅为向后兼容保留。默认跳过冒烟测试。
 if _env("SKIP_SMOKE"):
     SMOKE_MODELS = not _env_bool("SKIP_SMOKE", True)
 else:
@@ -86,11 +113,30 @@ UA = _env(
 )
 
 
-def require_imap() -> None:
-    missing = [k for k, v in {
-        "IMAP_USER": IMAP_USER,
-        "IMAP_PASS": IMAP_PASS,
-        "EMAIL_DOMAIN": EMAIL_DOMAIN,
-    }.items() if not v]
+def require_otp() -> None:
+    if OTP_PROVIDER == "mailapi":
+        required = {
+            "MAILAPI_BASE": MAILAPI_BASE,
+            "MAILAPI_KEY": MAILAPI_KEY,
+            "EMAIL_DOMAIN": EMAIL_DOMAIN,
+        }
+    elif OTP_PROVIDER == "selfhost":
+        required = {
+            "SELFHOST_BASE": SELFHOST_BASE,
+            "SELFHOST_ADMIN": SELFHOST_ADMIN,
+            "SELFHOST_PASSWORD": SELFHOST_PASSWORD,
+            "EMAIL_DOMAIN": EMAIL_DOMAIN,
+        }
+    else:
+        required = {
+            "IMAP_USER": IMAP_USER,
+            "IMAP_PASS": IMAP_PASS,
+            "EMAIL_DOMAIN": EMAIL_DOMAIN,
+        }
+    missing = [k for k, v in required.items() if not v]
     if missing:
-        raise SystemExit(f"ERROR: required env missing: {', '.join(missing)}")
+        raise SystemExit(f"错误: 缺少必需的环境变量: {', '.join(missing)}")
+
+
+# 兼容旧调用名
+require_imap = require_otp

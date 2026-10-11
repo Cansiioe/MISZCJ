@@ -1,8 +1,8 @@
-"""IMAP OTP poller for Mistral verification emails (catch-all safe).
+"""IMAP 验证码轮询器，用于收取 Mistral 验证邮件（兼容 catch-all）。
 
-- one reused IMAP connection
-- header-first fetch; full body only on candidates
-- sleep outside lock so workers can interleave
+- 复用同一个 IMAP 连接
+- 先只拉邮件头，命中候选才拉完整正文
+- 睡眠放在锁外，方便多个 worker 交错执行
 """
 from __future__ import annotations
 
@@ -68,7 +68,7 @@ def _close_mail() -> None:
 
 
 def _get_mail() -> imaplib.IMAP4_SSL:
-    """Live IMAP connection. Caller must hold _imap_lock."""
+    """返回一个可用的 IMAP 连接。调用方必须先持有 _imap_lock。"""
     global _mail, _mail_until
     now = time.monotonic()
     if _mail is not None and now < _mail_until:
@@ -78,7 +78,7 @@ def _get_mail() -> imaplib.IMAP4_SSL:
     m.login(config.IMAP_USER, config.IMAP_PASS)
     typ, _ = m.select("INBOX")
     if typ != "OK":
-        raise RuntimeError("IMAP SELECT INBOX failed")
+        raise RuntimeError("IMAP SELECT INBOX 失败")
     _mail = m
     _mail_until = now + _REUSE_S
     return m
@@ -90,9 +90,9 @@ def wait_otp(
     timeout: int | None = None,
     poll: float | None = None,
 ) -> str:
-    """Poll IMAP for 6-digit Mistral verify code for email_addr."""
+    """轮询 IMAP，等待 email_addr 对应的 6 位 Mistral 验证码。"""
     if not config.IMAP_USER or not config.IMAP_PASS:
-        raise RuntimeError("IMAP_USER / IMAP_PASS required")
+        raise RuntimeError("需要配置 IMAP_USER / IMAP_PASS")
     timeout = timeout if timeout is not None else config.OTP_TIMEOUT_S
     poll = max(0.3, float(poll if poll is not None else config.OTP_POLL_S))
     deadline = time.monotonic() + timeout
@@ -186,4 +186,4 @@ def wait_otp(
         if code:
             return code
         time.sleep(poll)
-    raise TimeoutError(f"OTP timeout for {email_addr} after {timeout}s")
+    raise TimeoutError(f"验证码超时：{email_addr} 等待 {timeout}s 仍未收到")

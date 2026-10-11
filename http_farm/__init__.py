@@ -1,4 +1,4 @@
-"""Mistral HTTP farm — pure HTTP signup / verify / API key (no browser)."""
+"""Mistral HTTP 注册机 — 纯 HTTP 完成注册 / 验证 / 取密钥（无需浏览器）。"""
 
 from .client import MistralHTTPClient
 from .farm import main as run_farm
