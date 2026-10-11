@@ -376,6 +376,15 @@ func (a *AdminHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		a.handleScheduling(w, r)
 
+	case path == "/proxies" && r.Method == http.MethodGet:
+		if !a.auth(w, r) {
+			return
+		}
+		writeJSON(w, map[string]interface{}{
+			"summary": a.proxy.proxyPool.Summary(),
+			"items":   a.proxy.proxyPool.Status(),
+		})
+
 	case path == "/alerts" && r.Method == http.MethodGet:
 		if !a.auth(w, r) {
 			return

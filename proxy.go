@@ -19,35 +19,19 @@ import (
 
 const mistralBase = "https://api.mistral.ai"
 
-// newUpstreamClient 构造访问 Mistral 的 HTTP 客户端。
-// 优先读 MISTRAL_PROXY，其次读标准环境变量 HTTPS_PROXY；都没设就直连。
-func newUpstreamClient() *http.Client {
-	proxyURL := getEnv("MISTRAL_PROXY", os.Getenv("HTTPS_PROXY"))
-	transport := &http.Transport{
-		MaxIdleConns:        100,
-		MaxIdleConnsPerHost: 16,
-		IdleConnTimeout:     90 * time.Second,
-	}
-	if proxyURL != "" {
-		if u, err := url.Parse(proxyURL); err == nil {
-			transport.Proxy = http.ProxyURL(u)
-			log.Printf("上游请求走代理: %s", proxyURL)
-		} else {
-			log.Printf("代理地址解析失败 %q: %v", proxyURL, err)
-		}
-	}
-	return &http.Client{Transport: transport, Timeout: 180 * time.Second}
-}
-
 type Proxy struct {
 	store    *Store
 	accounts []Account
 	counter  atomic.Uint64
 	mu       sync.RWMutex
-	client   *http.Client
 	filter   *ModelFilter
 	limiter  *rateLimiter
 	alerter  *Alerter
+
+	// 上游代理池：多代理轮询 + 失败拉黑
+	proxyPool *upstreamProxyPool
+	clientMu  sync.Mutex
+	clients   map[string]*http.Client
 
 	// 加权轮询状态
 	lastIdx        int
@@ -60,12 +44,38 @@ const defaultWeight = 100
 
 func NewProxy(store *Store) *Proxy {
 	return &Proxy{
-		store:   store,
-		client:  newUpstreamClient(),
-		filter:  &ModelFilter{},
-		limiter: newRateLimiter(),
-		alerter: newAlerter(),
+		store:     store,
+		filter:    &ModelFilter{},
+		limiter:   newRateLimiter(),
+		alerter:   newAlerter(),
+		proxyPool: newUpstreamProxyPool(),
+		clients:   map[string]*http.Client{},
 	}
+}
+
+// clientFor 按代理返回一个复用的 client。
+// 每个代理单独一个 Transport，这样连接能复用，而不是每次请求新建。
+func (p *Proxy) clientFor(u *url.URL) *http.Client {
+	key := "direct"
+	if u != nil {
+		key = u.String()
+	}
+	p.clientMu.Lock()
+	defer p.clientMu.Unlock()
+	if c, ok := p.clients[key]; ok {
+		return c
+	}
+	tr := &http.Transport{
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 16,
+		IdleConnTimeout:     90 * time.Second,
+	}
+	if u != nil {
+		tr.Proxy = http.ProxyURL(u)
+	}
+	c := &http.Client{Transport: tr, Timeout: 180 * time.Second}
+	p.clients[key] = c
+	return c
 }
 
 // ── 模型白名单 ────────────────────────────────────────────────────────────────
@@ -306,10 +316,17 @@ func isChatEndpoint(path string) bool {
 }
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// 请求体后面转发还要用，先读出来
-	body, err := io.ReadAll(r.Body)
+	// 请求体后面转发还要用，先读出来。加大小上限，避免超大 body 把内存吃满。
+	// 256K 上下文大约 1MB 文本，默认 32MB 已经很宽松。
+	maxBody := int64(getEnvInt("MAX_BODY_MB", 32)) << 20
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxBody+1))
 	if err != nil {
 		http.Error(w, "读取请求体失败", 500)
+		return
+	}
+	if int64(len(body)) > maxBody {
+		writeAPIError(w, http.StatusRequestEntityTooLarge, "body_too_large",
+			fmt.Sprintf("请求体超过上限 %d MB，可通过 MAX_BODY_MB 调整", maxBody>>20))
 		return
 	}
 
@@ -395,11 +412,22 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return // 客户端已断开
 		}
 
+		// 选一个上游代理；全被拉黑且不允许直连时直接报错
+		proxyURL := p.proxyPool.pick()
+		if proxyURL == nil && !p.proxyPool.allowDirect && len(p.proxyPool.proxies) > 0 {
+			writeAPIError(w, http.StatusServiceUnavailable, "no_proxy",
+				"所有上游代理都不可用，请检查代理状态")
+			return
+		}
+		client := p.clientFor(proxyURL)
+
 		start := time.Now()
-		resp, err := p.client.Do(req)
+		resp, err := client.Do(req)
 		if err != nil {
+			p.proxyPool.markFail(proxyURL)
 			continue
 		}
+		p.proxyPool.markOK(proxyURL)
 		latency := int(time.Since(start).Milliseconds())
 
 		// 顺手记下上游给的限额，供控制台展示
@@ -503,11 +531,14 @@ func (p *Proxy) proxyModels(w http.ResponseWriter, r *http.Request) {
 
 	req, _ := http.NewRequestWithContext(r.Context(), "GET", mistralBase+"/v1/models", nil)
 	req.Header.Set("Authorization", "Bearer "+acct.APIKey)
-	resp, err := p.client.Do(req)
+	proxyURL := p.proxyPool.pick()
+	resp, err := p.clientFor(proxyURL).Do(req)
 	if err != nil {
+		p.proxyPool.markFail(proxyURL)
 		http.Error(w, "上游服务错误", 502)
 		return
 	}
+	p.proxyPool.markOK(proxyURL)
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
 	w.Header().Set("Content-Type", "application/json")

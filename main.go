@@ -167,3 +167,13 @@ func getEnv(key, fallback string) string {
 	}
 	return fallback
 }
+
+// getEnvInt 读整数环境变量，解析失败或未设置时返回 fallback。
+func getEnvInt(key string, fallback int) int {
+	if v := os.Getenv(key); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
+	}
+	return fallback
+}

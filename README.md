@@ -135,11 +135,26 @@ IMAP_PASS=your-imap-password
 
 注册走 `config/proxies.ranked.txt` 里的代理（一行一个，支持 `http://user:pass@host:port`、`host:port`、`host:port:user:pass`）。
 
-路由器转发 `/v1/*` 到 `api.mistral.ai` 时走 `MISTRAL_PROXY`（没设则读 `HTTPS_PROXY`，都没有就直连）：
+路由器转发 `/v1/*` 到 `api.mistral.ai` 时走**上游代理池**：
 
 ```bash
-MISTRAL_PROXY=http://127.0.0.1:7890
+MISTRAL_PROXY=http://127.0.0.1:7890                               # 单个
+MISTRAL_PROXIES=http://127.0.0.1:7890,http://user:pass@host:port  # 多个，轮询
+PROXY_BAN_AFTER=3      # 连续失败几次后暂停该代理
+PROXY_BAN_SECONDS=60   # 暂停时长，到期自动放回
+PROXY_ALLOW_DIRECT=1   # 全部被暂停时是否允许直连；设 0 则返回 503
 ```
+
+单个代理挂了整条链路就断，而且悄无声息——所以做成了池子：多代理轮询，
+**连续失败的临时拉黑**，到期自动放回。实测：
+
+```
+配置 7890（可用）+ 9999（不可用），连发 8 个请求
+→ 全部 http=200（客户端完全无感）
+→ 坏代理 used=2 fails=2 banned=true，15s 后自动解封，恢复 2/2 可用
+```
+
+仪表盘的「上游健康」会列出每个代理的在线状态与使用次数。
 
 > 邮箱服务（邮件 API 服务 / 自建邮箱服务）的请求**不走**这个代理，直连即可。
 

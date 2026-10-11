@@ -274,14 +274,15 @@ async function renderDashboard() {
   const grid = $('#stats-grid');
   grid.innerHTML = Array.from({ length: 6 }, () => '<div class="stat-card skeleton" style="border-radius:20px"></div>').join('');
 
-  let stats = {}, series = [], proxy = null, usage = [], scheduleInfo = null;
+  let stats = {}, series = [], proxy = null, usage = [], scheduleInfo = null, proxyPool = null;
   try {
-    [stats, series, proxy, usage, scheduleInfo] = await Promise.all([
+    [stats, series, proxy, usage, scheduleInfo, proxyPool] = await Promise.all([
       get('/stats'),
       get('/stats/series?days=14').catch(() => []),
       get('/proxy/status').catch(() => null),
       get('/usage').catch(() => []),
       get('/scheduling').catch(() => null),
+      get('/proxies').catch(() => null),
     ]);
   } catch (e) {
     toast('error', '加载失败', e.message);
@@ -353,6 +354,25 @@ async function renderDashboard() {
       ? Object.entries(sch.weights).map(([id, w]) =>
           `<span class="model-chip">#${id} ${((w / weightTotal) * 100).toFixed(0)}%</span>`).join('')
       : '<span class="text-xs text-muted">—</span>';
+
+    const poolItems = (proxyPool && proxyPool.items) || [];
+    const poolRow = poolItems.length
+      ? `<div class="list-row">
+           <span class="lr-label">上游代理</span>
+           <span class="flex items-center gap-2">
+             <span class="tabular">${esc(proxyPool.summary)}</span>
+             <span class="cap-grid" style="justify-content:flex-end">
+               ${poolItems.map((it) => {
+                 const host = it.proxy.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+                 const cls = it.banned ? 'cap' : 'cap on';
+                 const tip = it.banned ? `已暂停，${it.resume_in}s 后重试` : `已用 ${it.used} 次`;
+                 return `<span class="${cls}" title="${esc(tip)}">${esc(host)}</span>`;
+               }).join('')}
+             </span>
+           </span>
+         </div>`
+      : '<div class="list-row"><span class="lr-label">上游代理</span><span class="text-xs text-muted">直连</span></div>';
+
     health.innerHTML = `
       <div class="list-row">
         <span class="lr-label">轮询状态</span>
@@ -364,6 +384,7 @@ async function renderDashboard() {
       <div class="list-row"><span class="lr-label">参与轮询账号</span><span class="tabular">${num(proxy.total_accounts)}</span></div>
       <div class="list-row"><span class="lr-label">上游限流</span><span class="flex items-center gap-2">${rateRow}</span></div>
       <div class="list-row"><span class="lr-label">流量分配</span><span class="cap-grid" style="justify-content:flex-end">${weightRow}</span></div>
+      ${poolRow}
       <div class="list-row"><span class="lr-label">下一个账号</span><span class="mono truncate" style="max-width:60%">${esc(proxy.next_account || '—')}</span></div>`;
   } else {
     health.innerHTML = '<div class="empty"><div class="e-title">无法读取上游状态</div></div>';
