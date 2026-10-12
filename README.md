@@ -1,33 +1,24 @@
-# Mistral 路由 + HTTP 注册机
+# Mistral 路由
 
-OpenAI 兼容的 **Mistral 多密钥路由器**，自带纯 HTTP 账号注册机。
-
-注册机默认走纯 HTTP 路径（不需要浏览器 / Camoufox / xvfb）。
+OpenAI 兼容的 **Mistral 多密钥路由器**。
 
 ## 功能
 
-- HTTP 注册机：Ory 注册 → IMAP 取验证码 → 铸造 API 密钥
-- 多线程并发 + 住宅代理池
 - OpenAI 兼容反向代理（`/v1/*`）
-- 管理界面：密钥管理、注册机控制、运行状态
+- 多账号加权轮询 + 全局令牌桶限流
+- 上游代理池：多代理轮询、故障拉黑、到期自动解封
+- 模型白名单：提前拦掉免费层不可用的模型，返回可读的 400
+- 密钥策略：有效期 / Token 配额 / 模型白名单 / IP 白名单
+- 管理界面：仪表盘、账号、密钥、模型中心、调用日志、用量统计、在线试玩、设置
+- 告警通知（企业微信 / 钉钉 / 飞书 / Telegram / 通用 JSON）与失效账号自动恢复
 
 ## 环境要求
 
 | 组件 | 要求 |
 |------|------|
 | 操作系统 | Linux / macOS / WSL2 |
-| Python | **3.10+** |
-| 网络 | 能通过 HTTPS 访问 `auth.mistral.ai`、`admin.mistral.ai`、`api.mistral.ai` |
-| 收码邮箱 | IMAP catch-all 收件箱、第三方邮件 API、或自建邮箱服务（三选一） |
-| 代理 | 并发数 > 3 时建议配置 |
-| Go（可选） | **1.25+**，用于编译路由器（受 `golang.org/x/crypto` 依赖要求限制） |
-
-Python 依赖：
-
-```text
-requests
-python-dotenv
-```
+| 网络 | 能通过 HTTPS 访问 `api.mistral.ai`、`console.mistral.ai` |
+| Go | **1.25+**，用于编译路由器（受 `golang.org/x/crypto` 依赖要求限制） |
 
 ## 快速开始
 
@@ -35,105 +26,30 @@ python-dotenv
 git clone <你的仓库地址>
 cd mistral-router
 
-make setup
-# 编辑 .env 和 config/proxies.ranked.txt
-make smoke          # 注册 2 个账号，并发 2
-make farm N=20 C=8  # 更大批量
-```
-
-克隆后的一行命令：
-
-```bash
-make setup && ${EDITOR:-nano} .env config/proxies.ranked.txt && make smoke
-```
-
-手动安装：
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-
 cp .env.example .env
-# 填写 IMAP_HOST、IMAP_USER、IMAP_PASS、EMAIL_DOMAIN
+# 编辑 .env：至少设置 ADMIN_PASSWORD（或使用首次启动打印的一次性随机密码）
 
-cp config/proxies.example.txt config/proxies.ranked.txt
-# 一行一个代理：
-#   http://user:pass@host:port
-
-python farm_http.py 2 2
+make router
+# 管理界面: http://127.0.0.1:7623/admin/
 ```
+
+或者手动：
+
+```bash
+go build -o bin/mistral-router .
+DATA_DIR=$PWD/data ./bin/mistral-router
+```
+
+> 提示：国内网络编译时若 `proxy.golang.org` 超时，先设置
+> `export GOPROXY=https://goproxy.cn,direct`。
 
 ## 配置说明
 
 | 文件 | 字段 |
 |------|------|
-| `.env` | `OTP_PROVIDER`、`EMAIL_DOMAIN`，以及所选通道的凭据（必填） |
-| `config/proxies.ranked.txt` | 代理列表（上量时建议配置） |
-
-### 取码通道
-
-注册机支持三种收验证码的方式，用 `OTP_PROVIDER` 切换（`mailapi` / `selfhost` / `imap`）。不填时自动推断：有 `MAILAPI_KEY` 走 mailapi，有 `SELFHOST_BASE` 走 selfhost，否则走 imap。
-
-**mailapi**（推荐）—— 对接第三方邮件服务的 REST API，按 mailboxId 管理临时邮箱：
-
-```bash
-OTP_PROVIDER=mailapi
-EMAIL_DOMAIN=your-domain.com
-MAILAPI_BASE=https://em.example.com/api/v1
-MAILAPI_KEY=sk_live_xxxxxxxx
-MAILAPI_DOMAIN_ID=<域名ID>     # 发件域名 ID，可用 GET /domains 查到
-MAILAPI_EXPIRES_HOURS=24     # 邮箱有效期（小时），创建时必填
-MAILAPI_PERMANENT=0          # 设 1 则创建永久邮箱（此时不传有效期）
-```
-
-流程：`POST /mailboxes` 建号 → 注册 → 轮询 `GET /mailboxes/{id}/messages` → 读 `/messages/{mid}/raw[/parsed]` 提取 6 位码。
-
-| 接口 | 用途 |
-|------|------|
-| `GET /domains` | 查域名列表，拿 `domainId` |
-| `POST /mailboxes` | 建号，body `{localPart, domainId, expiresInHours}` → 返回 `{id, address}` |
-| `GET /mailboxes/{id}/messages` | 邮件列表 |
-| `GET /mailboxes/{id}/messages/{mid}/raw`（或 `/raw/parsed`） | 邮件原文 / 解析后内容 |
-| `POST /mailboxes/{id}/release` · `/extend` | 释放 / 续期 |
-
-> **注意**：该通道是按 **mailboxId** 查邮件，不是按收件地址，所以创建时返回的 `id` 会一路带到取码环节（`wait_otp(..., mailbox_id=...)`）。邮箱过期后记录保留，可用 `/extend` 复活同一地址。
-
-**selfhost** —— 对接自建的邮件服务（参考实现：[maillab/cloud-mail](https://github.com/maillab/cloud-mail)），不需要 IMAP：
-
-```bash
-OTP_PROVIDER=selfhost
-EMAIL_DOMAIN=your-domain.com
-SELFHOST_BASE=https://mail.example.com
-SELFHOST_ADMIN=admin@your-domain.com
-SELFHOST_PASSWORD=你的管理员密码
-SELFHOST_CREATE_USER=1
-```
-
-用到的接口（全部是 POST）：
-
-| 接口 | 用途 |
-|------|------|
-| `/api/public/genToken` | 用管理员邮箱 + 密码换 token，body `{email, password}` |
-| `/api/public/addUser` | 批量建邮箱，body `{list:[{email}]}`；`SELFHOST_CREATE_USER=1` 时在注册前调用 |
-| `/api/public/emailList` | 查邮件，body `{toEmail, size, num}`；轮询提取 6 位验证码 |
-
-> **注意**：自建方案会把 token 存在服务端 KV 的**单个全局键** `public_key:` 上，每次 `genToken` 都会覆盖旧值——整个站点同时只有一个有效 token。注册机在进程内只取一次并复用，遇到 401 会自动重新换取。如果同时有网页端登录或第二个注册机实例，token 会互相顶掉（能自动恢复，只是多一次请求）。
-
-**imap** —— 传统 catch-all 邮箱：
-
-```bash
-OTP_PROVIDER=imap
-EMAIL_DOMAIN=your-domain.com
-IMAP_HOST=imap.example.com
-IMAP_PORT=993
-IMAP_USER=you@your-domain.com
-IMAP_PASS=your-imap-password
-```
+| `.env` | 管理员密码、上游代理、限流、告警、日志保留等（见下） |
 
 ### 代理
-
-注册走 `config/proxies.ranked.txt` 里的代理（一行一个，支持 `http://user:pass@host:port`、`host:port`、`host:port:user:pass`）。
 
 路由器转发 `/v1/*` 到 `api.mistral.ai` 时走**上游代理池**：
 
@@ -155,8 +71,6 @@ PROXY_ALLOW_DIRECT=1   # 全部被暂停时是否允许直连；设 0 则返回 
 ```
 
 仪表盘的「上游健康」会列出每个代理的在线状态与使用次数。
-
-> 邮箱服务的请求（两个通道都是）**不走**这个代理，直连即可。
 
 ### 模型白名单
 
@@ -181,7 +95,7 @@ PROXY_ALLOW_DIRECT=1   # 全部被暂停时是否允许直连；设 0 则返回 
 
 `allow` 支持尾部 `*` 通配（例如 `"ministral-*"`）；文件路径可用 `MODELS_FILE` 覆盖。
 
-**实测可用的 12 个模型**（2026-10-10，免费层新注册账号）：
+**实测可用的 12 个模型**（2026-10-10，免费层账号）：
 
 | 模型 | req/min |
 |------|---------|
@@ -265,46 +179,10 @@ GPT-4o 是 128K、Claude Sonnet 4 是 200K、DeepSeek V3 是 128K —— 所以 
 > `embeddings` / `ocr` / `moderations` 用的是另一套模型 id（如 `mistral-embed`），
 > 不会被对话白名单拦掉。
 
-常用可调参数：
-
-```bash
-CONCURRENCY=8       # 并发数
-MAX_ATTEMPTS=20     # 最多注册多少个账号
-SPAWN_DELAY_S=0.25  # 每个线程启动间隔（秒）
-SKIP_SMOKE=1        # 跳过冒烟测试
-OTP_TIMEOUT_S=100   # 等待验证码超时（秒）
-LOGIN_RETRIES=4     # 登录重试次数
-```
-
-## 输出文件
-
-- `results.json`
-- `results/batch_YYYYMMDD_HHMMSS/{accounts,failed,summary}.json`
-
-## 路由器（可选）
-
-```bash
-make router
-# 管理界面: http://127.0.0.1:7623/admin/
-```
-
-或者手动：
-
-```bash
-go build -o bin/mistral-router .
-FARM_DIR=$PWD DATA_DIR=$PWD/data ./bin/mistral-router
-```
-
-> 提示：国内网络编译时若 `proxy.golang.org` 超时，先设置
-> `export GOPROXY=https://goproxy.cn,direct`。
-
 ## Docker 部署
 
-路由器与注册机打进**同一个镜像**——router 需要拉起 `farm_http.py`，拆成两个容器
-反而要额外处理进程通信和共享目录。
-
 ```bash
-cp .env.example .env      # 填 ADMIN_PASSWORD / 取码通道 / 代理
+cp .env.example .env      # 填 ADMIN_PASSWORD / 上游代理等
 make docker               # 构建镜像
 make docker-up            # docker compose up -d
 # → http://127.0.0.1:7623/admin/
@@ -321,12 +199,12 @@ docker compose logs -f
 
 | 项 | 说明 |
 |---|---|
-| 多阶段构建 | Go 静态编译（`CGO_ENABLED=0`）→ `python:3.12-slim` 运行，最终镜像不含 Go 工具链 |
+| 多阶段构建 | Go 静态编译（`CGO_ENABLED=0`）→ 精简运行镜像，最终镜像不含 Go 工具链 |
 | 端口 | 默认只绑 `127.0.0.1:7623`；公网暴露请在前面加反向代理并启用鉴权 |
-| 数据持久化 | `./data`（SQLite 与日志）、`./results`（注册机批次）、`./config`（代理与白名单）都挂到宿主机 |
+| 数据持久化 | `./data`（SQLite 与日志）、`./config`（白名单）都挂到宿主机 |
 | 健康检查 | 每 30 秒打一次 `/healthz` |
 | 日志轮转 | json-file 驱动，单文件 10MB × 3 份 |
-| 密钥 | `.dockerignore` 已排除 `.env` / `proxies.ranked.txt` / `*.db`，镜像里不会带任何凭据 |
+| 密钥 | `.dockerignore` 已排除 `.env` / `*.db`，镜像里不会带任何凭据 |
 
 **容器访问宿主机代理**：compose 里默认 `MISTRAL_PROXY=http://host.docker.internal:7890`，
 并加了 `extra_hosts: host.docker.internal:host-gateway`（Linux 也能解析）。
@@ -351,7 +229,7 @@ make test        # 等价于 go test ./...
 
 ## 控制台
 
-管理界面在 `http://127.0.0.1:7623/admin/`，共 9 个页面：
+管理界面在 `http://127.0.0.1:7623/admin/`，共 8 个页面：
 
 | 页面 | 能力 |
 |------|------|
@@ -362,7 +240,6 @@ make test        # 等价于 go test ./...
 | 调用日志 | 全量审计：密钥、账号、模型、来源 IP、状态码、Token、延迟、错误；支持筛选与清空 |
 | 用量统计 | 按天 × 模型、按账号两个维度汇总 |
 | 在线试玩 | 直接发消息验证链路，首次使用自动创建试玩密钥 |
-| 注册机 | 启停、取码通道配置、实时日志、运行历史 |
 | 设置 | 轮询阈值、修改密码、接入信息、主题切换 |
 
 ### 密钥策略
@@ -413,8 +290,7 @@ x-ratelimit-remaining-req-minute: 187
 
 **关于计划与余额**：这两个字段在 console 侧（`/api/users/v2/organizations` 的
 `active_api_plan`、`/api/billing/credits` 的 `wallet_amount`），只能靠账号密码走 Ory
-登录流程获取。注册机导入账号时会把 `results.json` 里的密码一并存下（`accounts.password`），
-查询时自动尝试登录。
+登录流程获取。账号保存密码后（`accounts.password`），查询时会自动尝试登录。
 
 > 已知问题：Mistral 的 Ory 登录对非浏览器客户端会返回 `400 state=choose_method`
 > （CSRF 校验失败），此时额度查询会**降级**——仍然返回速率额度与可用模型，只是
@@ -531,52 +407,38 @@ CORS_ORIGINS=https://app.example.com,https://foo.dev   # 限定来源
 
 ```text
 .
-  http_farm/           # HTTP 注册机库
-    mailapi_otp.py     # 第三方邮件 API 取码通道
-    selfhost_otp.py    # 自建邮箱服务取码通道
-    imap_otp.py        # IMAP 取码通道
-    otp.py             # 取码通道分发（mailapi / selfhost / imap）
-  farm_http.py         # 命令行入口
-  Makefile             # setup / smoke / farm / router
-  requirements.txt
-  .env.example
-  config/proxies.example.txt    # 代理模板
-  config/models.available.json  # 模型白名单（免费层实测可用模型）
   *.go                 # 路由器
   web/                 # 管理界面（index.html + app.css + app.js，零构建）
-  data/ results/       # 运行时数据（已 gitignore）
+  config/proxies.example.txt    # 代理模板
+  config/models.available.json  # 模型白名单（免费层实测可用模型）
+  data/                # 运行时数据（已 gitignore）
+  Makefile             # 构建 / 启动 / 测试
 ```
 
 ## Make 目标
 
 ```bash
-make setup          # 建 venv + 装依赖 + 生成 .env 和代理模板
-make check          # 检查依赖导入和环境变量
-make smoke          # 小批量试跑
-make farm N=20 C=8  # 批量注册
 make router         # 启动路由器
-make clean          # 清理 venv 和构建产物（保留 .env）
+make test           # 跑 Go 单元测试
+make docker         # 构建镜像
+make docker-up      # docker compose 起服务
+make docker-down    # 停掉服务
+make clean          # 清理构建产物（保留 .env）
 ```
 
 ## 安全提示
 
-- 不要提交 `.env`、代理列表、`data/`、`results/`（已在 gitignore 中）。
+- 不要提交 `.env`、代理列表、`data/`（已在 gitignore 中）。
 - 路由器首次启动时请设置 `ADMIN_PASSWORD`，或使用日志里打印的一次性随机密码。
 - 公网 VPS 上建议把管理界面绑定到 localhost，或用反向代理加一层认证。
-- 分享压缩包前先跑 `scripts/package.sh`，它会剥离运行时密钥。
 
 ## 常见问题
 
 | 现象 | 处理 |
 |------|------|
-| `错误: 缺少必需的环境变量: IMAP_*` | 复制并编辑 `.env` |
 | 大量 `429` | 加代理、降低并发 |
-| `OTP timeout`（验证码超时） | 检查 catch-all 收信和 IMAP 凭据 |
-| `create_key unauthenticated` | 代理/会话的瞬时问题，重试通常能恢复 |
-| Go 编译失败 | 安装 Go 1.25+，或只用 Python 注册机 |
+| Go 编译失败 | 安装 Go 1.25+ |
 
 ## 备注
 
-- 收验证码是整个流程的主要耗时瓶颈。
-- 高并发且不用代理会触发认证接口限流。
 - 使用风险自负；请遵守 Mistral 服务条款和当地法律。
