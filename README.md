@@ -18,7 +18,7 @@ OpenAI 兼容的 **Mistral 多密钥路由器**，自带纯 HTTP 账号注册机
 | 操作系统 | Linux / macOS / WSL2 |
 | Python | **3.10+** |
 | 网络 | 能通过 HTTPS 访问 `auth.mistral.ai`、`admin.mistral.ai`、`api.mistral.ai` |
-| 收码邮箱 | IMAP catch-all 收件箱，或自建 [自建邮箱服务](https://github.com/maillab/cloud-mail) 站点（二选一） |
+| 收码邮箱 | IMAP catch-all 收件箱、第三方邮件 API、或自建邮箱服务（三选一） |
 | 代理 | 并发数 > 3 时建议配置 |
 | Go（可选） | **1.25+**，用于编译路由器（受 `golang.org/x/crypto` 依赖要求限制） |
 
@@ -75,14 +75,14 @@ python farm_http.py 2 2
 
 注册机支持三种收验证码的方式，用 `OTP_PROVIDER` 切换（`mailapi` / `selfhost` / `imap`）。不填时自动推断：有 `MAILAPI_KEY` 走 mailapi，有 `SELFHOST_BASE` 走 selfhost，否则走 imap。
 
-**mailapi**（推荐）—— 对接 邮件 API 服务 的 REST API：
+**mailapi**（推荐）—— 对接第三方邮件服务的 REST API，按 mailboxId 管理临时邮箱：
 
 ```bash
 OTP_PROVIDER=mailapi
 EMAIL_DOMAIN=your-domain.com
 MAILAPI_BASE=https://em.example.com/api/v1
 MAILAPI_KEY=sk_live_xxxxxxxx
-MAILAPI_DOMAIN_ID=1          # 发件域名 ID，可用 GET /domains 查到
+MAILAPI_DOMAIN_ID=<域名ID>     # 发件域名 ID，可用 GET /domains 查到
 MAILAPI_EXPIRES_HOURS=24     # 邮箱有效期（小时），创建时必填
 MAILAPI_PERMANENT=0          # 设 1 则创建永久邮箱（此时不传有效期）
 ```
@@ -97,9 +97,9 @@ MAILAPI_PERMANENT=0          # 设 1 则创建永久邮箱（此时不传有效�
 | `GET /mailboxes/{id}/messages/{mid}/raw`（或 `/raw/parsed`） | 邮件原文 / 解析后内容 |
 | `POST /mailboxes/{id}/release` · `/extend` | 释放 / 续期 |
 
-> **注意**：邮件 API 服务 是按 **mailboxId** 查邮件，不是按收件地址，所以创建时返回的 `id` 会一路带到取码环节（`wait_otp(..., mailbox_id=...)`）。邮箱过期后记录保留，可用 `/extend` 复活同一地址。
+> **注意**：该通道是按 **mailboxId** 查邮件，不是按收件地址，所以创建时返回的 `id` 会一路带到取码环节（`wait_otp(..., mailbox_id=...)`）。邮箱过期后记录保留，可用 `/extend` 复活同一地址。
 
-**selfhost** —— 对接自建 [自建邮箱服务](https://github.com/maillab/cloud-mail) 的公开 HTTP 接口，不需要 IMAP：
+**selfhost** —— 对接自建的邮件服务（参考实现：[maillab/cloud-mail](https://github.com/maillab/cloud-mail)），不需要 IMAP：
 
 ```bash
 OTP_PROVIDER=selfhost
@@ -118,7 +118,7 @@ SELFHOST_CREATE_USER=1
 | `/api/public/addUser` | 批量建邮箱，body `{list:[{email}]}`；`SELFHOST_CREATE_USER=1` 时在注册前调用 |
 | `/api/public/emailList` | 查邮件，body `{toEmail, size, num}`；轮询提取 6 位验证码 |
 
-> **注意**：自建邮箱服务 把 token 存在服务端 KV 的**单个全局键** `public_key:` 上，每次 `genToken` 都会覆盖旧值——整个站点同时只有一个有效 token。注册机在进程内只取一次并复用，遇到 401 会自动重新换取。如果同时有网页端登录或第二个注册机实例，token 会互相顶掉（能自动恢复，只是多一次请求）。
+> **注意**：自建方案会把 token 存在服务端 KV 的**单个全局键** `public_key:` 上，每次 `genToken` 都会覆盖旧值——整个站点同时只有一个有效 token。注册机在进程内只取一次并复用，遇到 401 会自动重新换取。如果同时有网页端登录或第二个注册机实例，token 会互相顶掉（能自动恢复，只是多一次请求）。
 
 **imap** —— 传统 catch-all 邮箱：
 
@@ -156,7 +156,7 @@ PROXY_ALLOW_DIRECT=1   # 全部被暂停时是否允许直连；设 0 则返回 
 
 仪表盘的「上游健康」会列出每个代理的在线状态与使用次数。
 
-> 邮箱服务（邮件 API 服务 / 自建邮箱服务）的请求**不走**这个代理，直连即可。
+> 邮箱服务的请求（两个通道都是）**不走**这个代理，直连即可。
 
 ### 模型白名单
 
@@ -532,8 +532,8 @@ CORS_ORIGINS=https://app.example.com,https://foo.dev   # 限定来源
 ```text
 .
   http_farm/           # HTTP 注册机库
-    mailapi_otp.py   # 邮件 API 服务 取码通道
-    selfhost_otp.py   # 自建邮箱服务 取码通道
+    mailapi_otp.py     # 第三方邮件 API 取码通道
+    selfhost_otp.py    # 自建邮箱服务取码通道
     imap_otp.py        # IMAP 取码通道
     otp.py             # 取码通道分发（mailapi / selfhost / imap）
   farm_http.py         # 命令行入口
