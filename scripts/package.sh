@@ -61,6 +61,7 @@ if command -v rg >/dev/null 2>&1; then
     -e '^IMAP_PASS=\S+' \
     -e '^ADMIN_PASSWORD=\S+' \
     -e 'http://[a-zA-Z0-9_.-]+:[^@[:space:]]{3,}@[a-zA-Z0-9.-]+:[0-9]+' \
+    -e '[a-zA-Z0-9-]+\.(xyz|top|icu|cn|cc|ml|ga|tk|shop|site)' \
     -e 'imap\.hostinger\.com' \
     -e '43\.133\.149\.136' \
     "$STAGE" 2>/dev/null | head -20 || true)
